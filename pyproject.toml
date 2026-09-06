@@ -37,9 +37,11 @@ classifiers = [
 # `crystal -> origin` at zero import sites by AST over non-test `src/`, at any scope including lazy
 # in-function imports, and its control proves the scan is not vacuous.
 #
-# `agience-ember` and `agience-mantle` are absent for the same reason plus one more: crystal sits
-# BELOW both in the DAG, so declaring either would invert it. The ontology reads a store and names
-# none — the host injects one through `crystal.ontology.driver.set_default_store_provider`.
+# `agience-ember` is absent for the same reason plus one more: ember declares crystal, so crystal
+# declaring ember would close a cycle. `agience-mantle` is absent for a different reason — mantle is
+# a SIBLING, not a layer. Neither declares the other, both declare only prism, and ember declares
+# both. The ontology reads a store and names none: the host injects one through
+# `crystal.ontology.driver.set_default_store_provider`.
 dependencies = [
     # The contract. `crystal_model.py` re-exports it wholesale from `prism.crystal_model`, and
     # `crystal.py` imports `prism.embodiment` at module scope for the injection contract, so a

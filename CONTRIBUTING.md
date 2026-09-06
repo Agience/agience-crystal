@@ -20,12 +20,24 @@ install satisfies an import without ever resolving the requirement.
 ## Tests
 
 ```bash
-pip install -e '.[ontology,dev]'
+pip install ../agience-prism/py'[wire,trust,vector]' ../agience-mantle
+pip install -e '.[service,ontology,dev]'
 python -m pytest -q src tests
 ```
 
-Both roots hold tests; that is what CI runs. **The suite needs nothing but this repository and
-`agience-prism`** — no sibling checkout, no environment variable, no operator bundles.
+Both roots hold tests; that is what CI runs. **No environment variable and no operator bundles**,
+and the two siblings are both public and neither sits above crystal:
+
+- **`agience-prism`** is the package crystal declares.
+- **`agience-mantle`** is a SIBLING — neither package declares the other — and it is needed by one
+  file. `tests/test_relation_signature.py` proves crystal's counter-based relation signature against
+  an independent `count(*)` on a real store, and that argument needs the reference implementation: a
+  double is written by the same hand as the thing it audits.
+
+`service` is in the install line because the SUITE needs it even though the package does not —
+`test_dispatcher.py` and the route tests import `crystal.dispatcher`, which imports fastapi at
+module scope. A developer machine tends to hide that by having fastapi installed for something
+else; a clean environment does not.
 
 Keep it that way. Three tests used to reach the repository ABOVE crystal — two injected the real
 aperture (`ember.optics`), one read ember's ingest vocabulary — and the cost was not theoretical:

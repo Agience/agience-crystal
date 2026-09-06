@@ -87,13 +87,14 @@ gateway state; the store never sees them.
 
 ## Where it sits
 
-    agience-prism   the contract, dependency-free        crystal depends on it
-    agience-crystal this repository                      the gateway
-    agience-ember   the observer unit                    depends on crystal, never the reverse
-    agience-mantle  the store                            reached over the wire, never imported
+    agience-prism   the contract, dependency-free   crystal depends on it
+    agience-crystal this repository                 the gateway
+    agience-mantle  the store                       a SIBLING — neither declares the other
+    agience-ember   the observer unit               declares crystal, and mantle, and prism
 
-Crystal is **below** ember and mantle in the dependency graph. That direction is what the licence
-section below is about.
+Crystal is **below ember**, which is what the licence section below is about: ember is AGPL and
+declaring it would resolve copyleft onto an Apache package's install path. Mantle is beside
+crystal, not above or below it — it is reached over the wire and imported by neither side.
 
 ## Contributing
 
