@@ -2,7 +2,7 @@
 
 A crystal is pure structure (the `crystal_model` contract: facets + tektons + organons, an inert
 content-addressed artifact). This module adds the energized form: a thin object that grounds that
-structure on a screen (the two-way membrane where sides meet, not the measurement aperture) and
+structure on a screen (the two-way membrane where sides meet, not the measurement itself) and
 drives the capacitor flow.
 
     facet (a view)      ─conduct→  place on the screen          (passes signals — transmission in)
@@ -34,8 +34,8 @@ Two homes, deliberately: the contract (validate/hash/activates_on) is stdlib-onl
 host verifies a crystal before grounding it; the instrument is only needed to energize one.
 
 The instrument is injected, never imported: a direct import would make crystal undeployable anywhere
-the instrument's package is not installed, and would pull ember's AGPL licence (the aperture
-wrapper is the copyleft hook) into what is otherwise a stdlib-light module. The embodiment arrives as
+the instrument's package is not installed, and would pull ember's AGPL licence into what is
+otherwise a stdlib-light module. The embodiment arrives as
 a constructor argument checked against `prism.embodiment`'s protocols, the same shape `prism.reach`
 already proves with `keyring=` and `lightcone=`: one keyword per contract, duck-typed, resolved by
 the host at assembly.
@@ -45,14 +45,14 @@ the host at assembly.
     c = Crystal(spec, embodiment=optics, conservation=conservation)
 
 Two slots, because they are two contracts (see `prism/embodiment.py` for the discriminators between
-them): the instrument is domain-specific (the aperture and beacon legitimately read a
-collapsed axis differently), while the accountant is domain-free arithmetic (numpy; `‖X‖²` cannot
+them): the instrument is domain-specific (two implementations legitimately read a collapsed axis
+differently), while the accountant is domain-free arithmetic (numpy; `‖X‖²` cannot
 diverge between domains). Neither implies the other here — `certificate()` on a crystal that
 conducted nothing needs the accountant and never touches the instrument; `condense()` needs the
 instrument and never touches the accountant.
 
 This buys one thing: the same crystal runs on a full node and on a constrained store. The package
-itself needs neither the aperture nor beacon; a deployment supplies whichever its embodiment requires.
+itself needs no instrument at all; a deployment supplies whichever one its embodiment requires.
 
 With nothing injected, measurement raises `EmbodimentRequired`, naming the contract, the member, and
 the operation, rather than degrading to a zero, a default basis, or a fabricated reading. Structure
@@ -134,7 +134,7 @@ class Crystal:
         self._tektons: Dict[str, Dict[str, Any]] = {t["name"]: t for t in self._spec.get("tektons", [])}
         self._organons: Dict[str, Dict[str, Any]] = {o["name"]: o for o in (self._spec.get("organons") or [])}
         self._bound: Dict[str, Dict[str, Any]] = {}  # facet name -> {entry, inverse, energy, zero}
-        # Only forwarded to Screen() if the caller supplied them — never re-declare the aperture's
+        # Only forwarded to Screen() if the caller supplied them — never re-declare the instrument's
         # derived defaults (far/null/seed) here (no arbitrary caps).
         self._m_kwargs = screen_kwargs
         self._m = None  # the screen is created lazily on first flow use (keeps import stdlib-light)
@@ -296,7 +296,7 @@ class Crystal:
         self._register(facet)
         return self
 
-    # ── the capacitor flow (delegate to the screen — the ONE aperture) ──────────────────────────
+    # ── the capacitor flow (delegate to the screen — the ONE measurement point) ─────────────────
 
     def conduct(self, facet: str, surface: Any) -> Any:
         """Transmission in: place a surface signal on the facet's conduit. Requires the facet to
@@ -452,7 +452,7 @@ class Crystal:
         return self._screen().coupling(facet_a, facet_b)
 
     def read(self) -> Any:
-        """The aperture measurement of the joint frame (K_signal, coherence, correlation length, …) on
+        """The instrument's measurement of the joint frame (K_signal, coherence, correlation length, …) on
         the UN-folded basis — a concentrated frame keeps its carrier."""
         return self._screen().read()
 

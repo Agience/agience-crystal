@@ -68,7 +68,7 @@ crystal run on a full node and on a constrained store.
 **No test here reaches a real instrument either.** `tests/test_embodiment_injection.py` carries a
 stub embodiment written against `prism.embodiment` in numpy and the stdlib, and the suite runs on
 that — an implementation crystal knows nothing about, which is what makes the slot a real slot. The
-claim that the *aperture* the host hands over also fits is asserted in `agience-ember`, which
+claim that the *instrument* the host hands over also fits is asserted in `agience-ember`, which
 imports crystal; making it from here would have meant importing the repository above this one.
 
 ## Layout
@@ -92,20 +92,15 @@ gateway state; the store never sees them.
     agience-mantle  the store                       a SIBLING — neither declares the other
     agience-ember   the observer unit               declares crystal, and mantle, and prism
 
-Crystal is **below ember**, which is what the licence section below is about: ember is AGPL and
-declaring it would resolve copyleft onto an Apache package's install path. Mantle is beside
-crystal, not above or below it — it is reached over the wire and imported by neither side.
+Crystal is **below ember**: ember declares crystal, and crystal declares nothing of ember. Mantle is
+beside crystal, not above or below it — reached over the wire and imported by neither side.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). The suite stands on this repository and `agience-prism`
-alone — no sibling checkout, no environment variable — so a fork can run it.
+See [CONTRIBUTING.md](CONTRIBUTING.md). The suite needs two public siblings — `agience-prism`, the
+package crystal declares, and `agience-mantle` for one file — and no environment variable, so a
+fork can run it.
 
 ## License
 
-Apache-2.0 (see [LICENSE](LICENSE) and [NOTICE](NOTICE)).
-
-The permissive licence is load-bearing, and `pyproject.toml` argues it at length: `pip install
-agience-crystal` must not resolve copyleft onto the install path. That is why crystal declares no
-dependency on ember even though ember sits above it. A dependency that would pull a copyleft package
-onto the install path is a design conversation, not a dependency bump.
+Apache-2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).

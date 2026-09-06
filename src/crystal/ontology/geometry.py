@@ -1171,7 +1171,7 @@ def text_to_signal(text: str, ic=None, D: int = _D_DEFAULT,
 
 
 def feature_covariance(frames: np.ndarray, forgetting: float = 1.0) -> np.ndarray:
-    """The forgetting-weighted feature covariance = the Pxx the Aperture accumulates: recent frames
+    """The forgetting-weighted feature covariance = the Pxx the instrument accumulates: recent frames
     weighted more (forgetting < 1 = leaky memory / light-cone taper). This D×D object is the
     point-in-time state — which concept-directions co-occur — and it is sign-stable and lives in the
     fixed concept-coordinate space, so it is directly comparable across artifacts.

@@ -40,7 +40,7 @@ module scope. A developer machine tends to hide that by having fastapi installed
 else; a clean environment does not.
 
 Keep it that way. Three tests used to reach the repository ABOVE crystal — two injected the real
-aperture (`ember.optics`), one read ember's ingest vocabulary — and the cost was not theoretical:
+instrument (`ember.optics`), one read ember's ingest vocabulary — and the cost was not theoretical:
 when this repository went public, CI could no longer read those private siblings and the whole
 suite job failed at checkout, on claims about crystal that needed neither of them. They now live in
 `agience-ember`, which imports crystal and can make them with the arrow pointing the way the

@@ -5,7 +5,7 @@ through the ontology driver and the lattice graph, and they compute nothing that
 
 That asymmetry is the whole reason for the split. mantle is ember's sibling in the DAG and does not
 reach up to it, so the signal-touching half stays in ember — the only layer that reaches both
-the corpus and the aperture, which `ember/optics.py` holds. The lookup half has no such constraint,
+the corpus and the instrument, which the host supplies. The lookup half has no such constraint,
 and it is the half the personas actually wanted: `wn_synsets_for` alone accounts for six
 `chorus -> ember` import sites, every one of them asking the corpus a question the store can answer
 by itself.
@@ -250,7 +250,7 @@ def subject_synsets(text: str) -> List[str]:
 
     The cross-taxonomy pair is already handled and needs nothing here. 📄 *"A noun and a verb share
     no ancestor, so a pair drawn across the two taxonomies has no subsumer and `jc_tree` returns
-    `IC(a) + IC(b)`. The mass gap already refuses that: the sum exceeds the corpus diameter for all
+    `IC(a) + IC(b)`. The propagation floor already refuses that: the sum exceeds the corpus diameter for all
     but the most generic 1.66% of synsets, and the verb taxonomy's own diameter (1.109) sits inside
     the horizon (1.691), so no within-tree verb pair is refused for being a verb."*
 
@@ -311,7 +311,7 @@ def wn_synsets_for(word: str) -> List[str]:
     nowhere. `match.coordinate_coverage` reports the tokens this leaves unplaced.
 
     A noun and a verb share no ancestor, so a pair drawn across the two taxonomies has no
-    subsumer and `jc_tree` returns `IC(a) + IC(b)`. The mass gap already refuses that: the sum
+    subsumer and `jc_tree` returns `IC(a) + IC(b)`. The propagation floor already refuses that: the sum
     exceeds the corpus diameter for all but the most generic 1.66% of synsets, and the verb
     taxonomy's own diameter (1.109) sits inside the horizon (1.691), so no within-tree verb pair
     is refused for being a verb."""

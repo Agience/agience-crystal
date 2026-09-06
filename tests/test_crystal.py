@@ -6,13 +6,13 @@ the coupling's sign is measured, never declared; (3) binding is persona-local an
 the crystal's shareable sha; (4) zero domain logic — the base bakes in no facet, tekton, or gauge.
 
 The instrument arrives as an argument, and this file supplies the STUB from
-`test_embodiment_injection.py` rather than the real aperture. That is deliberate: nothing here
+`test_embodiment_injection.py` rather than the real instrument. That is deliberate: nothing here
 asserts anything about a particular instrument — these are assertions about the crystal — and
-injecting the aperture meant importing the repository above this one, which made crystal's suite
+injecting the instrument meant importing the repository above this one, which made crystal's suite
 unrunnable without a checkout of a package crystal does not depend on.
 
-The real aperture is exercised against the same surface in
-`agience-ember/tests/test_the_aperture_is_a_crystal_embodiment.py`, where the host lives and where
+The real instrument is exercised against the same surface in
+`agience-ember/tests/test_the_instrument_is_a_crystal_embodiment.py`, where the host lives and where
 the dependency already points downward.
 
 `conservation` is `prism.conservation`, behind `prism[wire]` — a package crystal DOES depend on, so
@@ -58,7 +58,7 @@ def _energized(spec=SPEC, **kw) -> Crystal:
 
     The modules go in unadapted: the stub is an `Embodiment` and `prism.conservation` is a
     `Conservation`, because `prism/embodiment.py` names its members to match the implementation
-    that already existed rather than the reverse. A node injects the aperture here instead; these
+    that already existed rather than the reverse. A node injects the instrument here instead; these
     assertions hold for either, which is what makes the slot a slot."""
     return Crystal(spec, embodiment=_optics, conservation=_conservation, **kw)
 
@@ -70,7 +70,7 @@ def _identity_crystal() -> Crystal:
     return c
 
 
-# ── structure / identity (no aperture required) ───────────────────────────────────────────────────
+# ── structure / identity (no instrument required) ───────────────────────────────────────────────────
 
 def test_invalid_spec_refuses_to_ground():
     with pytest.raises(ValueError):
@@ -85,7 +85,7 @@ def test_structure_delegates_to_the_contract():
     assert c.sha == crystal_sha(SPEC)
 
 
-def test_construction_does_not_touch_the_aperture():
+def test_construction_does_not_touch_the_instrument():
     """Reading structure must not build a membrane: the embodiment is only reached once flow is
     actually driven, and crystal's own source never imports the instrument at all."""
     c = Crystal(SPEC)

@@ -5,20 +5,20 @@ the shape `prism.reach` already proves with `keyring=` and `lightcone=`. A lazy 
 edge: it would tie crystal's deployability to whichever package currently holds the instrument.
 
 Crystal's own source contains no reference to `beam` or `ember` at any scope. The
-aperture (`ember.optics`, AGPL) and its accompanying
+instrument (`ember.optics`, AGPL) and its accompanying
 `prism.conservation` cross that boundary at the call site, through the injected embodiment, not
 through an import in crystal. Only this file and `test_crystal.py` name a concrete instrument, in
 the one line that says which instrument the host hands over.
 
 The assertion this file exists to make: a crystal built from one spec runs against the real
-aperture (`ember.optics` + `prism.conservation`) and against a second, entirely
+instrument (`ember.optics` + `prism.conservation`) and against a second, entirely
 independent embodiment written here in ~120 lines of numpy that has never heard of an instrument. If
 it only ever ran against one, injection would be nominal and nothing would be shown — a
 `self._embodiment` that is always the same object is an import with extra steps.
 
 The stub is not a mock. It computes real answers by a different rule: its rank cut is the
-LAPACK-standard numerical rank (`max(shape)·eps·σ_max`), where the aperture's is a statistical signal
-rank against a derived noise floor. So the two legitimately disagree on `k` — exactly as the aperture
+LAPACK-standard numerical rank (`max(shape)·eps·σ_max`), where the instrument's is a statistical signal
+rank against a derived noise floor. So the two legitimately disagree on `k` — exactly as the instrument
 and beacon legitimately disagree on a collapsed axis (plan G1). Nothing below asserts
 the two produce equal numbers. What is asserted is what each is required to preserve — orthogonality
 of the split, conservation of energy, the measured sign of a coupling, the null on an unreadable
@@ -87,7 +87,7 @@ class _StubScreen:
 
     The coupling is the signed cosine between two placed frames. That is a real measurement with a
     real sign — not a stored declaration — which is the property `couple` exists to have. It is a
-    cruder instrument than the aperture's and it is supposed to be: the point is that crystal does
+    cruder instrument than the instrument's and it is supposed to be: the point is that crystal does
     not know or care which one it is holding."""
 
     def __init__(self, **kwargs):
@@ -161,7 +161,7 @@ class _StubEmbodiment:
         if basis is None:
             _u, s, vt = np.linalg.svd(W, full_matrices=False)
             # The LAPACK-standard numerical rank — derived from the dtype's eps and the frame's own
-            # shape, never a chosen threshold. Deliberately a different rule from the aperture's
+            # shape, never a chosen threshold. Deliberately a different rule from the instrument's
             # statistical signal rank, so the two are genuinely independent instruments.
             cut = float(s[0]) * max(W.shape) * float(np.finfo(W.dtype).eps)
             k = int((s > cut).sum())
@@ -188,7 +188,7 @@ class _StubEmbodiment:
         this stub fills `next_by_coupling` as well as `absorb_transmit` and `membrane_screen`.
 
         This is a genuinely independent implementation: it ranks with this stub's numerical-rank
-        split, not the aperture's statistical one, so agreement between the two is evidence rather
+        split, not the instrument's statistical one, so agreement between the two is evidence rather
         than a copy.
         """
         W = np.asarray(rows, dtype=float)
@@ -301,8 +301,8 @@ class _StubConservation:
 
 # ── the two embodiments, as the parametrisation every flow test runs over ────────────────────────
 
-# The APERTURE arm — `("aperture", ember.optics, prism.conservation)` — moved to
-# `agience-ember/tests/test_the_aperture_is_a_crystal_embodiment.py`. It required a checkout of the
+# The INSTRUMENT arm — `("instrument", ember.optics, prism.conservation)` — moved to
+# `agience-ember/tests/test_the_instrument_is_a_crystal_embodiment.py`. It required a checkout of the
 # repository ABOVE this one, which made crystal's CI depend on a private sibling and made the suite
 # unrunnable on a fork. Ember declares and imports crystal; crystal declares and imports nothing of
 # ember, and the tests now point the same way the packages do.
@@ -333,9 +333,9 @@ def test_the_two_embodiments_are_independent_implementations():
     assert prism_conservation.PathLedger is not _StubConservation.PathLedger
     # The fourth assertion moved to `agience-ember` on 2026-08-25 [John]. It read
     # `ember_optics.membrane_screen().__module__.startswith(...)` — a runtime check that the real
-    # aperture hands back the actual instrument, which is a fact about ember's function and named a
+    # instrument hands back the actual instrument, which is a fact about ember's function and named a
     # package crystal may not name. It now lives in
-    # `agience-ember/tests/test_ember_holds_the_aperture.py` — search it for `membrane_screen`.
+    # `agience-ember/tests/test_ember_holds_the_instrument.py` — search it for `membrane_screen`.
     # That repo is its proper owner and may name the package; this one may not, which is why the
     # pointer is a file rather than a test name.
     #
@@ -362,7 +362,7 @@ def test_the_stub_stands_on_numpy_and_the_stdlib_alone():
     """The second embodiment must stand on numpy alone, or it is not a second embodiment.
 
     Read from the module's own source rather than from `sys.modules`: this file legitimately imports
-    the aperture at the top for the first embodiment, so an interpreter-level check would be
+    the instrument at the top for the first embodiment, so an interpreter-level check would be
     satisfied by that import and could never fail."""
     import ast
     src = pathlib.Path(__file__).read_text(encoding="utf-8")
@@ -383,11 +383,11 @@ def test_the_stub_stands_on_numpy_and_the_stdlib_alone():
             # no attribute reach either: `ember_optics.something` inside the stub would be a leak
             if isinstance(node, ast.Name):
                 assert node.id not in {"ember_optics", "prism_conservation"}, (
-                    "%s reaches the aperture through %r" % (cls.name, node.id))
+                    "%s reaches the instrument through %r" % (cls.name, node.id))
     assert found == stub_classes, "a stub class went missing: %s" % sorted(stub_classes - found)
 
 
-# The module that fills conservation's instrument-bound member (the aperture side).
+# The module that fills conservation's instrument-bound member (the instrument side).
 def test_the_stub_embodiment_satisfies_the_prism_contract():
     """Structural, and it is what makes `ember.optics` usable unadapted: the protocol member names
     were derived from the implementation that already existed, not imposed on it."""
@@ -400,14 +400,14 @@ def test_the_stub_embodiment_satisfies_the_prism_contract():
     assert isinstance(prism_conservation.PathLedger(_F, at="x"), Ledger)
 
 
-# Two tests moved to `agience-ember/tests/test_the_aperture_is_a_crystal_embodiment.py`, because
-# each needs the real aperture in the process:
+# Two tests moved to `agience-ember/tests/test_the_instrument_is_a_crystal_embodiment.py`, because
+# each needs the real instrument in the process:
 #
 #   test_NO_SINGLE_MODULE_FILLS_CONSERVATION_AND_THAT_IS_THE_DESIGN
 #       reads `ember.optics`'s half of the Conservation contract. Asserted there now.
 #
 #   test_the_two_embodiments_agree_on_structure_and_are_free_to_disagree_on_the_number
-#       compared the aperture and the stub directly — same incident energy, `k` free to differ.
+#       compared the instrument and the stub directly — same incident energy, `k` free to differ.
 #       IT IS NOT ASSERTED ANYWHERE NOW, and that is a real loss rather than a relocation: it needs
 #       both implementations in one process, and they are in two repositories that a wheel does not
 #       carry tests between. Getting it back means the stub moving to `prism`, which owns the
@@ -488,7 +488,7 @@ def test_an_unreadable_frame_returns_the_null_under_either(name, emb, cons):
 @pytest.mark.parametrize("name,emb,cons", EITHER, ids=EITHER_IDS)
 def test_identity_is_unchanged_by_which_instrument_is_held(name, emb, cons):
     """The point of the slot: the crystal's shareable identity is a property of its structure, so
-    a node with the aperture and a store with a reduced embodiment address the same crystal."""
+    a node with the instrument and a store with a reduced embodiment address the same crystal."""
     c = _bound(emb, cons)
     assert c.sha == Crystal(SPEC).sha
     assert c.artifact() == Crystal(SPEC).artifact()
@@ -571,7 +571,7 @@ def test_the_refusal_is_a_typed_prism_error_that_names_the_fix():
     assert "embodiment=" in msg, "the refusal must say how to fix it"
 
     # `msg` is prism's own advisory text, from `prism/instrument.py::_FILLED_BY`, which names the
-    # module a host should inject. It names `ember.optics` — the aperture module this file imports
+    # module a host should inject. It names `ember.optics` — the instrument module this file imports
     # as `ember_optics` — for all four contract members, so the assertion below tracks that live
     # value rather than pinning a literal: `contract`, `member`, and `http_status`, the parts a
     # caller discriminates on, are asserted above and do not depend on the wording of `msg`.
@@ -622,9 +622,9 @@ def test_the_contracts_are_fillable_from_different_places():
     """Crossed wiring: the stub embodiment with the REAL accountant. Neither combination is
     special-cased anywhere, which is the operational meaning of "two contracts".
 
-    The mirrored crossing — the real aperture with the stub accountant — needs an embodiment from
+    The mirrored crossing — the real instrument with the stub accountant — needs an embodiment from
     the repository above this one and is asserted in
-    `agience-ember/tests/test_the_aperture_is_a_crystal_embodiment.py`."""
+    `agience-ember/tests/test_the_instrument_is_a_crystal_embodiment.py`."""
     for emb, cons in ((_StubEmbodiment, prism_conservation),):
         c = _bound(emb, cons)
         c.conduct("a", _F)
@@ -636,25 +636,25 @@ def test_the_contracts_are_fillable_from_different_places():
 # 5 · Crystal runs with the instrument unimportable
 # ═════════════════════════════════════════════════════════════════════════════════════════════════
 
-#: The instrument packages: the aperture's own package (`ember`), the archived and unimportable
+#: The instrument packages: the instrument's own package (`ember`), the archived and unimportable
 #: `beam`. `crystal` may not import any of them at
 #: any scope — it takes an injected embodiment instead — and this one tuple is what both halves of
 #: the proof below read.
 #:
 #: `beam` stays in the set although it cannot resolve: banning it here keeps that a stated property
 #: of crystal's imports rather than an accident of a package that happens to be missing today.
-# A THIRD NAME — the library underneath the aperture — WAS REMOVED 2026-08-25 [John: crystal
-# must not name it]. `ember` is the load-bearing entry and stays: the aperture IS `ember.optics`, so
+# A THIRD NAME — the library underneath the instrument — WAS REMOVED 2026-08-25 [John: crystal
+# must not name it]. `ember` is the load-bearing entry and stays: the instrument IS `ember.optics`, so
 # blocking `ember` makes the import fail on the ember leg and the self-check below still passes.
 # What is lost: a transitive pull of that library by some route OTHER than ember is no longer
-# blocked here. `agience-ember/tests/test_one_aperture.py` is the guard that still names it.
+# blocked here. `agience-ember/tests/test_one_instrument.py` is the guard that still names it.
 _INSTRUMENT_PACKAGES = frozenset({"beam", "ember"})
 BLOCKED_NAMES = tuple(sorted(_INSTRUMENT_PACKAGES))
 
 _SUBPROCESS = r'''
 import sys
 
-# `ember` belongs in this tuple: the aperture lives at `ember.optics`, so blocking `beam` alone
+# `ember` belongs in this tuple: the instrument lives at `ember.optics`, so blocking `beam` alone
 # leaves the package that now holds the instrument importable. With only `beam` blocked,
 # `import ember.optics` still resolves `ember` itself into
 # the subprocess, so the proof would report success on a weaker claim than the one it is named for.
@@ -780,25 +780,25 @@ def test_the_whole_flow_runs_with_the_instrument_UNIMPORTABLE():
     Source analysis cannot see an import through `importlib`, a `__getattr__` on module load, or a
     transitive pull from a sibling. This can. It asserts the blocker fires first, so a finder that
     silently matched nothing would fail here instead of reporting a green run."""
-    # The blocked set is checked against the aperture itself, not against a remembered name.
+    # The blocked set is checked against the instrument itself, not against a remembered name.
     #
-    # A hand-maintained list of package names cannot catch a change of aperture package: dropping
+    # A hand-maintained list of package names cannot catch a change of instrument package: dropping
     # `ember` from `_INSTRUMENT_PACKAGES` and from the program's `BLOCKED` would leave this whole
     # file green, because `import ember.optics` still fails — on the library leg — while `ember`
     # itself loads fine. The proof would silently narrow from "crystal runs without the instrument"
     # to "crystal runs without the library" with nothing to say so.
     #
-    # The name is a literal because this file no longer imports the aperture — deriving it from
-    # the module meant importing the repository above this one, which is what the aperture arm was
-    # moved out for. The cost is real and is stated rather than hidden: if the aperture moves to a
+    # The name is a literal because this file no longer imports the instrument — deriving it from
+    # the module meant importing the repository above this one, which is what the instrument arm was
+    # moved out for. The cost is real and is stated rather than hidden: if the instrument moves to a
     # different package, nothing here notices. `agience-ember`'s own suite is what tracks where the
-    # aperture lives, and `_INSTRUMENT_PACKAGES` below is what this file blocks.
-    aperture_pkg = "ember"
-    assert aperture_pkg in _INSTRUMENT_PACKAGES, (
-        "the aperture lives in %r and the proof does not block it — so this test would run with the "
+    # instrument lives, and `_INSTRUMENT_PACKAGES` below is what this file blocks.
+    instrument_pkg = "ember"
+    assert instrument_pkg in _INSTRUMENT_PACKAGES, (
+        "the instrument lives in %r and the proof does not block it — so this test would run with the "
         "instrument's own package importable and still report success. Add %r to "
         "`_INSTRUMENT_PACKAGES` and to the program's `BLOCKED`."
-        % (aperture_pkg, aperture_pkg))
+        % (instrument_pkg, instrument_pkg))
 
     # The subprocess carries its own copy of the blocked set, so the two are pinned equal here.
     # `_SUBPROCESS` is a source string — nothing in it is reachable from this module's namespace, so
@@ -845,7 +845,7 @@ def test_crystal_src_imports_no_instrument_anywhere():
     `ARCHITECTURE-TARGET.md` §2 uses, so the number travels with its meaning. The count is 0, and
     this test is the ratchet that keeps it there.
 
-    `_INSTRUMENT_PACKAGES` includes `ember` as well as `beam`: the aperture lives at `ember.optics`,
+    `_INSTRUMENT_PACKAGES` includes `ember` as well as `beam`: the instrument lives at `ember.optics`,
     so a ban naming only `beam` would go on passing forever against a package nobody can import — a
     check that cannot fail. Naming the live package is what makes `crystal → ember` == 0 a property
     this test actually holds.

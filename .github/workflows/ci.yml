@@ -61,7 +61,7 @@ jobs:
   # of them sits above crystal in the DAG, so a fork can run this.
   #
   # It could not before. `test_crystal.py` and `test_embodiment_injection.py` injected the real
-  # aperture, and one test read ember's ingest vocabulary, so the job checked out `agience-ember`
+  # instrument, and one test read ember's ingest vocabulary, so the job checked out `agience-ember`
   # and `agience-observe` — both private. Once this repository went public its own GITHUB_TOKEN
   # could no longer read them and the job failed at checkout, on a claim about crystal that needed
   # neither repository. Those assertions moved to `agience-ember`, which imports crystal and can
