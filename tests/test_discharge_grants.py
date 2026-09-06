@@ -10,7 +10,7 @@ SPEC = {
     "facets": [{"name": "reading", "direction": "out"}],
     "tektons": [{"name": "sense", "domain": "telemetry"}],
     "organons": [{"name": "op.sense", "requires": ["sensor.capture"]}],
-    "created_by": "john@ikailo.com",
+    "created_by": "author@example.com",
 }
 
 
@@ -71,12 +71,12 @@ def test_no_authority_is_distinguishable_from_no_grant_and_no_hardware():
 
 def test_a_granted_energy_lights_and_is_marked_authorized():
     auth = _Authority(True)
-    energy = {"created_by": "john@ikailo.com", "payload": 1}
+    energy = {"created_by": "author@example.com", "payload": 1}
     d = Crystal(SPEC).discharge("op.sense", _Prism(), energy=energy, authority=auth)
     assert d["status"] == "lit" and d["authorized"] is True
     assert len(auth.asked) == 1
     who, what, sha = auth.asked[0]
-    assert (who, what) == ("john@ikailo.com", "op.sense")
+    assert (who, what) == ("author@example.com", "op.sense")
     assert sha == Crystal(SPEC).sha        # the crystal is named too — grants ride the crystal
 
 

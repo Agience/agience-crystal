@@ -46,7 +46,7 @@ SPEC = {
         {"name": "op.retrieve", "requires": ["store.read"]},
         {"name": "op.reason", "requires": ["compute.local"]},
     ],
-    "created_by": "john@ikailo.com",
+    "created_by": "author@example.com",
 }
 
 # an ordered (T=6, D=3) frame with structure on every axis

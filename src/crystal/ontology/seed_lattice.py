@@ -14,6 +14,8 @@ and stamps the transducer artifact's content-type. lumen reads/writes this cache
 """
 from __future__ import annotations
 
+from crystal.authorship import DEFAULT_AUTHOR
+
 import sys
 from typing import Any, Dict, List
 
@@ -85,7 +87,7 @@ def _crossed(n: int, every: int, flushed: int) -> bool:
     return (n % every) < flushed
 
 
-def persist_ic(store, idx, docs, *, author: str = "john@ikailo.com",
+def persist_ic(store, idx, docs, *, author: str = DEFAULT_AUTHOR,
                checkpoint_every: int = 40000, log=print) -> int:
     """Write the corpus's IC measurement onto the synset rows that disagree with it, then record
     what that measurement was taken from (`_wn.IC_BASIS_ID`, the ontology driver). Returns rows
@@ -147,7 +149,7 @@ def persist_ic(store, idx, docs, *, author: str = "john@ikailo.com",
     return n
 
 
-def refresh_ic(store, *, author: str = "john@ikailo.com", checkpoint_every: int = 40000,
+def refresh_ic(store, *, author: str = DEFAULT_AUTHOR, checkpoint_every: int = 40000,
                log=print) -> Dict[str, Any]:
     """Re-take the corpus's IC measurement and persist it — the standalone half of `build`'s phase 2.
 
@@ -291,7 +293,7 @@ def conceptnet_ic(store, *, log=print) -> Dict[str, float]:
 CN_IC_BASIS_ID = "geom.conceptnet-ic-basis"
 
 
-def persist_conceptnet_ic(store, *, author: str = "john@ikailo.com",
+def persist_conceptnet_ic(store, *, author: str = DEFAULT_AUTHOR,
                           checkpoint_every: int = 40000, log=print) -> Dict[str, Any]:
     """Write the ConceptNet concepts' own IC onto their artifacts. Returns `{derived, written}`.
 
@@ -417,7 +419,7 @@ def _relation_signature(store, label: str, sample: int = 4000) -> dict:
             "inverse": best, "inverse_share": (inv[best] / len(pairs)) if best else 0.0}
 
 
-def relation_vertices(store, *, author: str = "john@ikailo.com") -> int:
+def relation_vertices(store, *, author: str = DEFAULT_AUTHOR) -> int:
     """Every relation becomes a vertex. Returns how many were written.
 
     A relation carried as a string in an edge's `label` column is a member of a closed 85-value
@@ -471,7 +473,7 @@ def relation_vertices(store, *, author: str = "john@ikailo.com") -> int:
     return n
 
 
-def build(store, *, lang: str = "en", author: str = "john@ikailo.com",
+def build(store, *, lang: str = "en", author: str = DEFAULT_AUTHOR,
           edge_batch: int = 1000, checkpoint_every: int = 40000, log=print) -> Dict[str, Any]:
     """Lay the language:<lang> transducer substrate from the ingested WordNet, once:
 

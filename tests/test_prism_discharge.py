@@ -17,7 +17,7 @@ SPEC = {
     "facets": [{"name": "source", "direction": "in"}, {"name": "indexed", "direction": "out"}],
     "tektons": [{"name": "astra", "domain": "ingestion"}],
     "organons": [{"name": "op.fetch.get", "requires": ["net.get"]}],  # a true organon: touches the world
-    "created_by": "john@ikailo.com",
+    "created_by": "author@example.com",
 }
 
 
