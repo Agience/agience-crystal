@@ -1,0 +1,108 @@
+name: ci
+
+# Two jobs, because the two claims this repository makes are tested by different things.
+#
+# The first is the INSTALL claim: `pip install agience-crystal` gives you the gateway on one
+# dependency, and importing it pulls no instrument and no numpy. That has to be checked against a
+# real install of the built distribution and nothing else on the path, or it checks nothing.
+#
+# The second is the suite, and it needs most of the platform — `tests/test_crystal.py` imports
+# `ember.optics` at module scope because that file is where the HOST lives: it assembles a real node
+# and hands the aperture over. Crystal's product code imports none of that (the ratchets below prove
+# it); the host tests do, on purpose.
+on:
+  push:
+    branches: [main]
+  pull_request: {}
+  workflow_dispatch: {}
+
+jobs:
+  # The gateway install, alone. No sibling checkout, no extras — just the wheel and what it declares.
+  gateway-install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      # From an index, not from the checkout: this resolves `agience-prism` for real, which is the
+      # step that catches a dependency naming a distribution that does not exist. That defect
+      # shipped once here — the line said `agience-prism-py`, which is the REPOSITORY name and not a
+      # distribution — and every editable install in the developer workspace hid it.
+      - run: pip install .
+      # Stated as an allow-list rather than a list of things not to import. A deny-list only ever
+      # catches what somebody thought to name, and it goes stale the moment a new package could be
+      # reached; this fails on anything outside the base install, including one nobody predicted.
+      - name: Importing crystal reaches nothing but the contract
+        run: |
+          python - <<'PY'
+          import sys
+          before = set(sys.modules)
+          import crystal
+          ALLOWED = {"crystal", "prism"}
+          reached = sorted({m.split(".")[0] for m in set(sys.modules) - before}
+                           - ALLOWED - sys.stdlib_module_names)
+          assert not reached, (
+              "`import crystal` reached %s. The base install is the contract: the embodiment that "
+              "measures is INJECTED by the host at assembly, so a crystal that imports one does not "
+              "run on a constrained store." % (reached,))
+          print("import crystal: reaches only", sorted(ALLOWED))
+          PY
+      - name: The ontology extra installs and imports
+        run: |
+          pip install '.[ontology]'
+          python -c "import crystal.ontology.geometry; print('ontology extra: ok')"
+      # The wheel ships `crystal` and nothing else. Reads the built artifact, because the defect it
+      # holds lived in the distribution and not in any import.
+      - run: pip install build pytest
+      - run: python -m pytest tests/test_the_wheel_ships_only_crystal.py -q
+
+  # The suite. Assembles the platform, because the host tests are a real assembly.
+  full-suite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Siblings come from this organization's repositories rather than from an index, so CI tests
+      # crystal against the revision beside it rather than against whatever version PyPI served
+      # today. Falls back to the job's own GITHUB_TOKEN when the PAT is absent — supplying an EMPTY
+      # token is a hard error, which is a worse failure than the Not Found it replaces.
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/agience-prism-py
+          path: .siblings/prism
+          token: ${{ secrets.WORKSPACE_READ_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/agience-mantle
+          path: .siblings/mantle
+          token: ${{ secrets.WORKSPACE_READ_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/agience-ember
+          path: .siblings/ember
+          token: ${{ secrets.WORKSPACE_READ_TOKEN || github.token }}
+      # The operator bundles. `prism.runner` resolves a group to a sha-verified payload and there is
+      # no in-package copy to fall back to, so without this the suite fails at
+      # UnknownBundleGroupError rather than at anything it means to test.
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/agience-observe
+          path: .siblings/observe
+          token: ${{ secrets.WORKSPACE_READ_TOKEN || github.token }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --upgrade pip setuptools
+      - run: pip install './.siblings/prism[wire,trust,vector]' ./.siblings/mantle
+      - run: pip install -e '.[ontology]' ./.siblings/ember
+      - run: pip install build pytest pytest-asyncio pytest-timeout
+      - name: Run the suite
+        env:
+          AGIENCE_BUNDLE_ROOT: ${{ github.workspace }}/.siblings/observe/bundles
+          # One thread is the only safe setting in CI: OpenBLAS otherwise faults at exit or hangs,
+          # and two workflows running one suite should not disagree about it.
+          OPENBLAS_NUM_THREADS: "1"
+        run: python -m pytest -q --timeout=300

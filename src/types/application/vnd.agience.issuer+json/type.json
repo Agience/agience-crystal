@@ -1,0 +1,89 @@
+{
+  "content_type": "application/vnd.agience.issuer+json",
+  "version": 1,
+  "inherits": [
+    "application/json"
+  ],
+  "description": "A trusted token issuer. The same primitive the platform Authority is built from (issuer URL + a key set) — generalized so external OIDC IdPs (Entra/Auth0/Okta) and, in time, the platform's own service anchors are all governable artifacts rather than env config. The verifier resolves its whole trust set from these artifacts. ONLY issuer artifacts created by the platform system principal are trusted — Mantle's create endpoint is label-blind, so the content-type alone never confers trust (that would let any user mint a trusted IdP). Adding/rotating an issuer is therefore a privileged, audited artifact edit.",
+  "context_schema": {
+    "title": {
+      "type": "string",
+      "description": "Display title for the issuer."
+    },
+    "issuer": {
+      "type": "string",
+      "description": "The `iss` claim this issuer mints — a URL (external IdP / Origin) or a service name (platform anchor). Unique key of the trust entry."
+    },
+    "audience": {
+      "type": "string",
+      "description": "Expected `aud` (the client id registered with the IdP). Optional; when set, tokens whose aud differs are rejected."
+    },
+    "jwks": {
+      "type": "object",
+      "description": "RFC 7517 JSON Web Key Set ({keys:[{kty,kid,n,e,alg,use}]}) — inline public keys. Canonical source; no fetch. Provide this OR `jwks_uri`."
+    },
+    "jwks_uri": {
+      "type": "string",
+      "description": "URL to fetch the issuer's JWKS from (keys cached + refreshed on a kid miss). Used when `jwks` is not inlined. If neither is set, the JWKS URL is discovered from `<issuer>/.well-known/openid-configuration`."
+    },
+    "namespace": {
+      "type": "string",
+      "description": "Stable tenant key for this issuer (multi-tenant). Each external issuer = one tenant; a token's subject is namespaced by (tenant, sub) so colliding subs across IdPs never merge. Defaults to the issuer URL. Pin an explicit value so the tenant survives an issuer-URL change."
+    },
+    "role": {
+      "type": "string",
+      "description": "`external` (an OIDC IdP — verify-only, tenant-namespaced; the default) or `platform` (a platform service anchor — verifiable, native tenant). The verifier's tenant-namespacing + audience-skip key off this.",
+      "enum": ["external", "platform"]
+    }
+  },
+  "operations": {
+    "create": {
+      "enabled": false,
+      "comment": "Not creatable via the normal API. A trusted issuer is privileged trust config — it must be created by the platform system principal (gateway admin op / seed), like the authority artifact. Mantle's plain create is label-blind, so the verifier additionally requires created_by == system principal before trusting an issuer."
+    },
+    "read": {
+      "enabled": true,
+      "requires_grant": "read",
+      "dispatch": { "kind": "artifact_crud" }
+    },
+    "update": {
+      "enabled": true,
+      "requires_grant": "admin",
+      "dispatch": { "kind": "artifact_crud" },
+      "emits": [
+        { "event": "issuer.updated", "phase": "after" }
+      ],
+      "comment": "Rotating an issuer's JWKS / audience requires the platform-admin grant. The verifier watches issuer.created|updated|deleted and refreshes its cached trust map (same pattern as authority.updated)."
+    },
+    "delete": {
+      "enabled": true,
+      "requires_grant": "admin",
+      "dispatch": { "kind": "artifact_crud" },
+      "emits": [
+        { "event": "issuer.deleted", "phase": "after" }
+      ],
+      "comment": "Revoking trust in an issuer. Admin-only."
+    }
+  },
+  "ui": {
+    "id": "issuer",
+    "label": "Trusted Issuer",
+    "icon": "key-round",
+    "color": "#0ea5e9",
+    "badge_class": "bg-sky-100 text-sky-800",
+    "tile_class": "",
+    "modes": [
+      "view",
+      "edit"
+    ],
+    "states": [
+      "view",
+      "edit"
+    ],
+    "default_mode": "view",
+    "default_state": "view",
+    "is_container": false,
+    "creatable": false,
+    "viewer": "issuer"
+  }
+}

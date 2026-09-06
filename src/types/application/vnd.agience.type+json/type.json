@@ -1,0 +1,59 @@
+{
+  "content_type": "application/vnd.agience.type+json",
+  "version": 1,
+  "extensions": [],
+  "inherits": [],
+  "description": "A content-type definition, stored as an artifact. This is how a type becomes a first-class, collection-scoped, runtime-resolved object: a server self-registers each type it owns by writing one of these into a collection (the platform Types directory for first-party personas, or an app's own data collection for third-party apps). The platform resolves a type by reading the type-definition artifacts visible in the request's scope — never by scanning a server's filesystem. `context.target_content_type` is the type this artifact defines; `context.definition` is that type's full `type.json` (ui, operations, schema, the server-owned `ui.resource_uri` viewer pointer).",
+  "context_schema": {
+    "target_content_type": {
+      "type": "string",
+      "description": "The content type this artifact defines (e.g. application/vnd.agience.chat+json).",
+      "mutable": false
+    },
+    "definition": {
+      "type": "object",
+      "description": "The full type.json the owning server published for target_content_type.",
+      "mutable": true
+    },
+    "source": {
+      "type": "string",
+      "description": "Provenance label for the publishing server (e.g. chorus/iris).",
+      "mutable": true
+    }
+  },
+  "operations": {
+    "read": {
+      "enabled": true,
+      "requires_grant": "read",
+      "dispatch": { "kind": "artifact_crud" }
+    },
+    "update": {
+      "enabled": true,
+      "requires_grant": "update",
+      "dispatch": { "kind": "artifact_crud" },
+      "emits": [
+        { "event": "artifact.updated", "phase": "after" }
+      ]
+    },
+    "delete": {
+      "enabled": true,
+      "requires_grant": "delete",
+      "dispatch": { "kind": "artifact_crud" },
+      "emits": [
+        { "event": "artifact.deleted", "phase": "after" }
+      ]
+    }
+  },
+  "ui": {
+    "label": "Type Definition",
+    "icon": "file-code-2",
+    "color": "#64748b",
+    "modes": ["floating", "preview"],
+    "states": ["view"],
+    "default_mode": "preview",
+    "default_state": "view",
+    "is_container": false,
+    "creatable": false,
+    "viewer": "json"
+  }
+}

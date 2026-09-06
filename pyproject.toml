@@ -1,0 +1,115 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agience-crystal"
+version = "0.1.0"
+description = "Agience Crystal — condensation, routing: signal to content type. The dispatcher/gateway fronting the chorus tekton services. Import name is `crystal`."
+readme = { file = "README.md", content-type = "text/markdown" }
+requires-python = ">=3.11"
+license = "Apache-2.0"
+authors = [{ name = "Ikailo Inc.", email = "connect@agience.ai" }]
+keywords = ["agience", "crystal", "gateway", "dispatcher", "routing", "content-type", "mcp"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+
+# The base install is one package, and the licence is why.
+#
+# Crystal is Apache-2.0 and `pip install agience-crystal` must not resolve copyleft onto the install
+# path. The AGPL components of this system — origin, ember, chorus — are SINKS: nothing imports
+# them, and no dependency line here names one. A dependency naming an AGPL package is that violation
+# in its most literal form, because it resolves copyleft onto the install path whether or not a line
+# of it is ever imported.
+#
+# Origin is REACHED, at `ORIGIN_URI` over HTTP (`identity.py`, `mantle_client.py`) — a service call,
+# not a link, which is the whole distinction. `tests/test_crystal_does_not_import_origin.py` holds
+# `crystal -> origin` at zero import sites by AST over non-test `src/`, at any scope including lazy
+# in-function imports, and its control proves the scan is not vacuous.
+#
+# `agience-ember` and `agience-mantle` are absent for the same reason plus one more: crystal sits
+# BELOW both in the DAG, so declaring either would invert it. The ontology reads a store and names
+# none — the host injects one through `crystal.ontology.driver.set_default_store_provider`.
+dependencies = [
+    # The contract. `crystal_model.py` re-exports it wholesale from `prism.crystal_model`, and
+    # `crystal.py` imports `prism.embodiment` at module scope for the injection contract, so a
+    # crystal install without prism fails at `import crystal` rather than deep in a flow.
+    #
+    # The distribution is `agience-prism`. The REPOSITORY is `agience-prism-py`, and the two names
+    # differ on purpose; `agience-prism-py` is not a distribution and resolves to nothing on PyPI.
+    "agience-prism>=0.1.2",
+]
+
+[project.urls]
+Homepage = "https://agience.ai"
+Source = "https://github.com/Agience/agience-crystal"
+Issues = "https://github.com/Agience/agience-crystal/issues"
+
+[project.optional-dependencies]
+# The gateway runtime — what `crystal.main`, `crystal.host` and the clients beneath them import.
+#
+# An extra rather than base dependencies because the base install is the CONTRACT, and it is a
+# measured split rather than a preference: 23 of crystal's 34 non-test modules import on
+# `agience-prism` and the stdlib alone — `crystal_model`, `config`, `context`, `crystal`,
+# `registry`, `topology`, `evolution`, `manifest_base`, `operator_schema`, `type_registry`,
+# `relay_manager`, `persona_registration`, `gateway_middleware`, `logging_config`, `web_serve` and
+# the ontology's driver, lookup, coupling, freshness, transducer and seed_lattice. The other 11 are
+# the ones that SERVE, and this is their line.
+#
+# `pip install agience-crystal` gives you the contract and the ontology driver.
+# `pip install agience-crystal[service]` gives you a gateway that boots.
+#
+# Every entry is imported directly at module scope in non-test `src/` — starlette included, which
+# arrives transitively with fastapi but is imported by name in `host.py`. Declaring what you import
+# is one rule: an edge that only resolves through someone else's manifest is a fact about that
+# manifest, not a declaration. Floors rather than pins, because this is a library and a library that
+# pins exactly cannot be co-installed with anything wanting the same package.
+service = [
+    "fastapi>=0.110",                    # dispatcher, host, main, mcp_client
+    "uvicorn[standard]>=0.27",           # host.run / main.__main__ serve on it
+    "starlette>=0.36",                   # host.py, by name
+    "httpx>=0.27",                       # dispatcher, identity, mantle, mantle_client, mcp_client,
+                                         # type_registration — the gateway talks HTTP, not MCP-lib
+    "pydantic>=2",                       # main.py request/response models
+    "python-jose[cryptography]>=3.3",    # identity.py — platform-service JWTs
+    "websockets>=12",                    # events.py — the change-feed consumer
+    "requests>=2.31",                    # push.py — Mantle REST
+]
+
+# The coordinate — `crystal.ontology.{driver,geometry,lookup,coupling}`, where IC, the
+# Jiang-Conrath coordinate, `jc_tree`, the lexical entry index and the relation coupling signs live.
+#
+# An extra rather than a base dependency because `import crystal` pulls no instrument and no numpy:
+# the embodiment that measures is INJECTED by the host at assembly, so the same crystal runs on a
+# full node and on a constrained store. `crystal.ontology.geometry` imports numpy at module scope
+# (the dense JL basis is numpy arithmetic), so it goes behind a subpackage a gateway-only install
+# never imports. `tests/test_embodiment_injection.py` holds the base install to numpy and the
+# stdlib, so any import outside that allow-list fails there.
+#
+# A floor rather than a pin: this is a library extra, and a bare requirement would be satisfied by
+# whatever the machine already has.
+ontology = ["numpy>=1.26"]
+
+# The test runners. `pytest-asyncio` because one test file is async, and `build` because
+# `tests/test_the_wheel_ships_only_crystal.py` builds a real wheel and reads what came out.
+dev = ["pytest>=8", "pytest-asyncio>=0.24", "pytest-timeout>=2.2", "build>=1.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+# `include` is load-bearing, not tidiness. `src/` also holds `tests/` (one geometry memo test) and
+# `types/` (the builtin content-type skeletons, JSON with no `.py`). Neither is a package, so
+# `find` does not return them — but without this filter setuptools still wrote both into
+# `top_level.txt` and shipped `src/tests/` in the wheel, so `pip install agience-crystal` installed
+# a top-level `tests` module into site-packages and squatted that name for everything else in the
+# environment. `tests/test_the_wheel_ships_only_crystal.py` holds it.
+include = ["crystal*"]
