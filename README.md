@@ -63,9 +63,13 @@ A gateway with no Mantle and no Origin still starts; it answers what it can reac
 
 `import crystal` pulls no instrument and no numpy — checked in CI on a bare install, not asserted
 here. The embodiment that measures arrives from the host at assembly, which is what lets the same
-crystal run on a full node and on a constrained store. The two test files that *do* reach an
-instrument (`tests/test_crystal.py`, `tests/test_embodiment_injection.py`) are where the host lives:
-they assemble a real node, and that reach is test-only by design.
+crystal run on a full node and on a constrained store.
+
+**No test here reaches a real instrument either.** `tests/test_embodiment_injection.py` carries a
+stub embodiment written against `prism.embodiment` in numpy and the stdlib, and the suite runs on
+that — an implementation crystal knows nothing about, which is what makes the slot a real slot. The
+claim that the *aperture* the host hands over also fits is asserted in `agience-ember`, which
+imports crystal; making it from here would have meant importing the repository above this one.
 
 ## Layout
 
@@ -93,8 +97,8 @@ section below is about.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). The suite needs two things the package does not — an
-`AGIENCE_BUNDLE_ROOT` and an installed `agience-ember` — and that file says why.
+See [CONTRIBUTING.md](CONTRIBUTING.md). The suite stands on this repository and `agience-prism`
+alone — no sibling checkout, no environment variable — so a fork can run it.
 
 ## License
 

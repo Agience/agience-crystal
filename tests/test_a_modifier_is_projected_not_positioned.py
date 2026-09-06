@@ -176,16 +176,12 @@ def test_a_store_that_cannot_be_read_projects_nothing(store):
     assert projected_nouns_for(_Broken(), "beautiful.a.01") == []
 
 
-def test_the_backfilled_labels_are_the_ones_the_parser_keeps():
-    """The projection reads labels the ingest must actually write. These two sets drifting apart is
-    how the walk would come back empty on a correctly-backfilled store, silently."""
-    from crystal.ontology import lookup
+# `test_the_backfilled_labels_are_the_ones_the_parser_keeps` moved to
+# `agience-ember/tests/test_the_projection_reads_what_the_ingest_writes.py`.
+#
+# It asserted that the labels this projection walks are the ones ember's stage-0 ingest actually
+# writes — a claim about TWO repositories, made from the lower one, so crystal's suite could not
+# run without a checkout of the repository above it. Ember imports crystal and can read both sides;
+# crystal imports nothing of ember and cannot. It was the last thing tying this suite to a sibling,
+# and the only one that needed `AGIENCE_BUNDLE_ROOT`.
 
-    from ember.corpus.stage0_sources import _SENSE_RELATIONS_KEPT
-
-    sense_level = {"derivation", "pertainym"}
-    assert sense_level <= _SENSE_RELATIONS_KEPT, (
-        "the parser drops %s, so the projection has no edges to walk"
-        % (sense_level - _SENSE_RELATIONS_KEPT))
-    walked = set(lookup._TO_NOUN) | set(lookup._ADVERB_TO_ADJECTIVE) | set(lookup._TO_HEAD_ADJECTIVE)
-    assert sense_level <= walked, "the projection stopped reading a label the parser writes"

@@ -20,23 +20,24 @@ install satisfies an import without ever resolving the requirement.
 ## Tests
 
 ```bash
-pip install -e '.[ontology]'
-export AGIENCE_BUNDLE_ROOT=/path/to/agience-observe/bundles
+pip install -e '.[ontology,dev]'
 python -m pytest -q src tests
 ```
 
-Both roots hold tests; that is what CI runs.
+Both roots hold tests; that is what CI runs. **The suite needs nothing but this repository and
+`agience-prism`** — no sibling checkout, no environment variable, no operator bundles.
 
-Two things the suite needs that the package does not:
+Keep it that way. Three tests used to reach the repository ABOVE crystal — two injected the real
+aperture (`ember.optics`), one read ember's ingest vocabulary — and the cost was not theoretical:
+when this repository went public, CI could no longer read those private siblings and the whole
+suite job failed at checkout, on claims about crystal that needed neither of them. They now live in
+`agience-ember`, which imports crystal and can make them with the arrow pointing the way the
+packages already point.
 
-- **`AGIENCE_BUNDLE_ROOT`.** `prism.runner` resolves an operator group to a sha-verified payload and
-  there is no in-package copy to fall back to, so without it several files fail at
-  `UnknownBundleGroupError` before reaching anything they test. Point it at `bundles/` in an
-  `agience-observe` checkout.
-- **`agience-ember` installed.** `tests/test_crystal.py` and `tests/test_embodiment_injection.py`
-  import `ember.optics` at module scope, because those two files are where the HOST lives: they
-  assemble a real node and hand the aperture over. That is a test-only reach and it must stay one —
-  crystal's product code imports no ember, and `pip install agience-crystal` must never pull it.
+A new test that needs ember, mantle, chorus or observe belongs in that repository, not here. What
+crystal proves about the injected embodiment it proves against the stub in
+`tests/test_embodiment_injection.py` — an implementation written against `prism.embodiment` in
+numpy and the stdlib that crystal knows nothing about, which is what makes the slot a real slot.
 
 ## Rules
 

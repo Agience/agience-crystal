@@ -5,21 +5,30 @@ contract and never require the instrument; (2) the capacitor flow delegates to t
 the coupling's sign is measured, never declared; (3) binding is persona-local and does not change
 the crystal's shareable sha; (4) zero domain logic — the base bakes in no facet, tekton, or gauge.
 
-The instrument arrives as an argument. `ember` is imported here, in a test, and nowhere under
-`src/` — the host is what fills the slot. `test_embodiment_injection.py` proves the same crystal
-runs against a second, entirely independent embodiment.
+The instrument arrives as an argument, and this file supplies the STUB from
+`test_embodiment_injection.py` rather than the real aperture. That is deliberate: nothing here
+asserts anything about a particular instrument — these are assertions about the crystal — and
+injecting the aperture meant importing the repository above this one, which made crystal's suite
+unrunnable without a checkout of a package crystal does not depend on.
 
-The two halves come from two packages, and the split is the point: `conservation` is
-`prism.conservation`, behind `prism[wire]`; `optics` is the aperture, `ember.optics`. This file
-imports each directly from its own package.
+The real aperture is exercised against the same surface in
+`agience-ember/tests/test_the_aperture_is_a_crystal_embodiment.py`, where the host lives and where
+the dependency already points downward.
+
+`conservation` is `prism.conservation`, behind `prism[wire]` — a package crystal DOES depend on, so
+it is injected here unchanged.
 """
 from __future__ import annotations
 
 import numpy as np
 import pytest
 
-from ember import optics as _optics
 from prism import conservation as _conservation
+
+# `tests/` is a package, so this is a relative import. The stub lives beside its own
+# proof rather than in a fixture module: `test_embodiment_injection.py` asserts the
+# stub screen is defined in that file, which is what makes the swap non-cosmetic.
+from .test_embodiment_injection import _StubEmbodiment as _optics
 
 from crystal import Crystal
 from crystal.crystal_model import crystal_sha
@@ -45,11 +54,12 @@ _F = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 0], [0, 1, 1], [1, 0, 1]]
 
 
 def _energized(spec=SPEC, **kw) -> Crystal:
-    """A crystal with the real aperture injected — what a full node assembles.
+    """A crystal with an embodiment injected — the shape a full node assembles.
 
-    The modules go in unadapted: `ember.optics` is an `Embodiment` and `prism.conservation` is a
-    `Conservation`, because `prism/embodiment.py` names its members to match the embodiment
-    implementation, not the reverse."""
+    The modules go in unadapted: the stub is an `Embodiment` and `prism.conservation` is a
+    `Conservation`, because `prism/embodiment.py` names its members to match the implementation
+    that already existed rather than the reverse. A node injects the aperture here instead; these
+    assertions hold for either, which is what makes the slot a slot."""
     return Crystal(spec, embodiment=_optics, conservation=_conservation, **kw)
 
 

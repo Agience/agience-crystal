@@ -52,7 +52,6 @@ import sys
 import numpy as np
 import pytest
 
-from ember import optics as ember_optics   # the host's instrument — see the header; crystal never imports it
 from prism import conservation as prism_conservation
 
 from crystal import Crystal
@@ -302,10 +301,19 @@ class _StubConservation:
 
 # ── the two embodiments, as the parametrisation every flow test runs over ────────────────────────
 
-APERTURE = ("aperture", ember_optics, prism_conservation)
+# The APERTURE arm — `("aperture", ember.optics, prism.conservation)` — moved to
+# `agience-ember/tests/test_the_aperture_is_a_crystal_embodiment.py`. It required a checkout of the
+# repository ABOVE this one, which made crystal's CI depend on a private sibling and made the suite
+# unrunnable on a fork. Ember declares and imports crystal; crystal declares and imports nothing of
+# ember, and the tests now point the same way the packages do.
+#
+# What is proved HERE is the part that is crystal's: the slot is a real slot, filled by an
+# implementation crystal knows nothing about. `EITHER` keeps its shape rather than being inlined,
+# because a second local embodiment is the natural way to strengthen this file and the
+# parametrisation is where it would go.
 STUB = ("stub", _StubEmbodiment, _StubConservation)
-BOTH = [APERTURE, STUB]
-BOTH_IDS = [b[0] for b in BOTH]
+EITHER = [STUB]
+EITHER_IDS = [b[0] for b in EITHER]
 
 
 def _bound(embodiment, conservation, spec=SPEC) -> Crystal:
@@ -322,8 +330,6 @@ def _bound(embodiment, conservation, spec=SPEC) -> Crystal:
 def test_the_two_embodiments_are_independent_implementations():
     """The control for every parametrised test below: if both parameters resolved to the same
     code, the whole file would be one embodiment run twice and would prove nothing."""
-    assert ember_optics.absorb_transmit is not _StubEmbodiment.absorb_transmit
-    assert ember_optics.membrane_screen() is not _StubEmbodiment.membrane_screen()
     assert prism_conservation.PathLedger is not _StubConservation.PathLedger
     # The fourth assertion moved to `agience-ember` on 2026-08-25 [John]. It read
     # `ember_optics.membrane_screen().__module__.startswith(...)` — a runtime check that the real
@@ -382,13 +388,10 @@ def test_the_stub_stands_on_numpy_and_the_stdlib_alone():
 
 
 # The module that fills conservation's instrument-bound member (the aperture side).
-_APERTURE_CONSERVATION_SOURCE = ember_optics
-
-
-def test_both_embodiments_satisfy_the_prism_contract():
+def test_the_stub_embodiment_satisfies_the_prism_contract():
     """Structural, and it is what makes `ember.optics` usable unadapted: the protocol member names
     were derived from the implementation that already existed, not imposed on it."""
-    for name, emb, cons in BOTH:
+    for name, emb, cons in EITHER:
         assert isinstance(emb, Embodiment), name
         assert members_of(emb, "embodiment") == EMBODIMENT_MEMBERS, name
         # `Conservation` is not asserted whole here — see the test below for why.
@@ -397,53 +400,26 @@ def test_both_embodiments_satisfy_the_prism_contract():
     assert isinstance(prism_conservation.PathLedger(_F, at="x"), Ledger)
 
 
-def test_NO_SINGLE_MODULE_FILLS_CONSERVATION_AND_THAT_IS_THE_DESIGN():
-    """`Conservation` is filled by two modules together, and a host injects both:
+# Two tests moved to `agience-ember/tests/test_the_aperture_is_a_crystal_embodiment.py`, because
+# each needs the real aperture in the process:
+#
+#   test_NO_SINGLE_MODULE_FILLS_CONSERVATION_AND_THAT_IS_THE_DESIGN
+#       reads `ember.optics`'s half of the Conservation contract. Asserted there now.
+#
+#   test_the_two_embodiments_agree_on_structure_and_are_free_to_disagree_on_the_number
+#       compared the aperture and the stub directly — same incident energy, `k` free to differ.
+#       IT IS NOT ASSERTED ANYWHERE NOW, and that is a real loss rather than a relocation: it needs
+#       both implementations in one process, and they are in two repositories that a wheel does not
+#       carry tests between. Getting it back means the stub moving to `prism`, which owns the
+#       contract both are written against. Recorded here so nobody concludes it was redundant.
 
-        prism.conservation  ->  energy, PathLedger      (numpy, and it may never import an instrument)
-        ember.optics        ->  entropy_bits            (an adapter over the aperture's entropy)
-
-    `entropy_bits` is the one accounting member a real implementation may legitimately not have.
-    Having `prism.conservation` implement `−Σ p log₂ p` on the numpy it already carries would make
-    the contract fillable whole — and would forfeit the property that makes `entropy_bits` worth
-    having. `ember/optics.py` states it: a caller's entropy and the instrument's own internal
-    entropy over geometry marginals and mode weights are the same callable and cannot drift. It
-    clips at `1e-12` and guards at `1e-30`; a restatement in prism would have to match those
-    exactly, forever, or diverge silently. That would be a fourth copy of a law bought to make one
-    `isinstance` return True.
-
-    The partial fill is the same shape `Instrument` already has: `require()` is per member, at
-    the point of use. mantle's beacon fills `Read` but not `Instrument`; `prism.conservation`
-    fills two members and leaves the third unfilled. Nothing pretends.
-    """
-    from prism.instrument import _FILLED_BY
-
-    prism_side = set(members_of(prism_conservation, "conservation"))
-    aperture_side = set(members_of(_APERTURE_CONSERVATION_SOURCE, "conservation"))
-
-    assert prism_side and aperture_side, "both sides must fill something, or the split is imaginary"
-    assert not (prism_side & aperture_side), (
-        "the two modules OVERLAP on %s — a member filled twice is a member that can drift, which is "
-        "the whole reason entropy_bits was not re-implemented" % sorted(prism_side & aperture_side))
-    assert prism_side | aperture_side == set(CONSERVATION_MEMBERS), (
-        "together they must fill the contract exactly; missing %s"
-        % sorted(set(CONSERVATION_MEMBERS) - (prism_side | aperture_side)))
-
-    # The control: neither alone is enough. Without it, the assertions above are satisfied by a
-    # contract of one member that one module happens to hold.
-    assert prism_side != set(CONSERVATION_MEMBERS), "prism alone would make this test meaningless"
-    assert aperture_side != set(CONSERVATION_MEMBERS), "the aperture alone likewise"
-
-    # The error message a host actually sees names both sources, so nobody is sent to inject a
-    # module that leaves the same member unfilled again.
-    assert "conservation" in _FILLED_BY
 
 
 # ═════════════════════════════════════════════════════════════════════════════════════════════════
 # 2 · The same crystal runs on both
 # ═════════════════════════════════════════════════════════════════════════════════════════════════
 
-@pytest.mark.parametrize("name,emb,cons", BOTH, ids=BOTH_IDS)
+@pytest.mark.parametrize("name,emb,cons", EITHER, ids=EITHER_IDS)
 def test_the_same_crystal_conducts_condenses_and_transmits_on_either(name, emb, cons):
     c = _bound(emb, cons)
     c.conduct("a", _F)
@@ -455,7 +431,7 @@ def test_the_same_crystal_conducts_condenses_and_transmits_on_either(name, emb, 
         assert abs(float((np.asarray(absorbed) * np.asarray(transmitted)).sum())) < 1e-8
 
 
-@pytest.mark.parametrize("name,emb,cons", BOTH, ids=BOTH_IDS)
+@pytest.mark.parametrize("name,emb,cons", EITHER, ids=EITHER_IDS)
 def test_energy_is_conserved_at_the_crossing_under_either(name, emb, cons):
     c = _bound(emb, cons)
     c.conduct("a", _F)
@@ -470,7 +446,7 @@ def test_energy_is_conserved_at_the_crossing_under_either(name, emb, cons):
     assert 0.0 < cert["tolerance"] < led["incident"]
 
 
-@pytest.mark.parametrize("name,emb,cons", BOTH, ids=BOTH_IDS)
+@pytest.mark.parametrize("name,emb,cons", EITHER, ids=EITHER_IDS)
 def test_the_coupling_sign_is_measured_under_either(name, emb, cons):
     c = _bound(emb, cons)
     c.conduct("a", _F)
@@ -481,7 +457,7 @@ def test_the_coupling_sign_is_measured_under_either(name, emb, cons):
     assert c.couple("a", "b") < 0.0, "opposed sides detract (−) — %s" % name
 
 
-@pytest.mark.parametrize("name,emb,cons", BOTH, ids=BOTH_IDS)
+@pytest.mark.parametrize("name,emb,cons", EITHER, ids=EITHER_IDS)
 def test_silence_stays_silence_under_either(name, emb, cons):
     """A surface that fires nothing is an empty crossing, trivially conserved — never a crash and
     never a synthesised answer."""
@@ -495,7 +471,7 @@ def test_silence_stays_silence_under_either(name, emb, cons):
     assert c.certificate()["balanced"] is True
 
 
-@pytest.mark.parametrize("name,emb,cons", BOTH, ids=BOTH_IDS)
+@pytest.mark.parametrize("name,emb,cons", EITHER, ids=EITHER_IDS)
 def test_an_unreadable_frame_returns_the_null_under_either(name, emb, cons):
     """One row cannot carry a read. Both instruments must say so by returning None from
     `absorb_transmit`, and the crystal must then propagate the frame whole — the entire incident
@@ -509,7 +485,7 @@ def test_an_unreadable_frame_returns_the_null_under_either(name, emb, cons):
     assert led["conserved"] is True
 
 
-@pytest.mark.parametrize("name,emb,cons", BOTH, ids=BOTH_IDS)
+@pytest.mark.parametrize("name,emb,cons", EITHER, ids=EITHER_IDS)
 def test_identity_is_unchanged_by_which_instrument_is_held(name, emb, cons):
     """The point of the slot: the crystal's shareable identity is a property of its structure, so
     a node with the aperture and a store with a reduced embodiment address the same crystal."""
@@ -519,22 +495,6 @@ def test_identity_is_unchanged_by_which_instrument_is_held(name, emb, cons):
     assert c.required_capabilities() == ["store.read"]
 
 
-def test_the_two_embodiments_agree_on_structure_and_are_free_to_disagree_on_the_number():
-    """States what is not claimed: two engines agreeing is not evidence either is correct, and two
-    engines disagreeing is not evidence either is wrong — each needs the domain argument (plan G1).
-    The shared claim is the invariant, and `k` is explicitly allowed to differ because the two use
-    different rank rules on purpose."""
-    ks, energies = {}, {}
-    for name, emb, cons in BOTH:
-        c = _bound(emb, cons)
-        c.conduct("a", _F)
-        led = c.ledger()
-        ks[name] = led["k"]
-        energies[name] = led["incident"]
-    # the incident energy is the frame's, not the instrument's — it cannot legitimately differ
-    assert abs(energies["aperture"] - energies["stub"]) < 1e-12
-    # k may differ, and this records what was measured rather than pinning agreement
-    assert isinstance(ks["aperture"], int) and isinstance(ks["stub"], int)
 
 
 # ═════════════════════════════════════════════════════════════════════════════════════════════════
@@ -625,7 +585,7 @@ def test_a_misspelled_slot_is_not_silently_swallowed():
     `embodyment=`, leaving a crystal that looks instrumented and is not. Both constructors name the
     slots explicitly, so the typo lands on the screen and fails there instead of producing a wrong
     answer."""
-    c = Crystal(SPEC, embodyment=ember_optics)            # typo → a screen construction kwarg
+    c = Crystal(SPEC, embodyment=_StubEmbodiment)         # typo → a screen construction kwarg
     c.bind("a", entry=lambda x: np.asarray(x, float), inverse=lambda X: X)
     with pytest.raises(EmbodimentRequired):
         c.conduct("a", _F)
@@ -659,9 +619,13 @@ def test_the_instrument_is_useful_with_no_accountant_at_all():
 
 
 def test_the_contracts_are_fillable_from_different_places():
-    """Crossed wiring: the real aperture with the stub accountant, and the reverse. Neither
-    combination is special-cased anywhere, which is the operational meaning of "two contracts"."""
-    for emb, cons in ((ember_optics, _StubConservation), (_StubEmbodiment, prism_conservation)):
+    """Crossed wiring: the stub embodiment with the REAL accountant. Neither combination is
+    special-cased anywhere, which is the operational meaning of "two contracts".
+
+    The mirrored crossing — the real aperture with the stub accountant — needs an embodiment from
+    the repository above this one and is asserted in
+    `agience-ember/tests/test_the_aperture_is_a_crystal_embodiment.py`."""
+    for emb, cons in ((_StubEmbodiment, prism_conservation),):
         c = _bound(emb, cons)
         c.conduct("a", _F)
         assert c.ledger()["conserved"] is True
@@ -824,10 +788,12 @@ def test_the_whole_flow_runs_with_the_instrument_UNIMPORTABLE():
     # itself loads fine. The proof would silently narrow from "crystal runs without the instrument"
     # to "crystal runs without the library" with nothing to say so.
     #
-    # So the name is derived from the module the host actually hands over. `ember_optics` is the
-    # real aperture; its top-level package is whatever package currently holds it. If the aperture
-    # moves again, this assertion fails until the block follows it.
-    aperture_pkg = ember_optics.__name__.split(".")[0]
+    # The name is a literal because this file no longer imports the aperture — deriving it from
+    # the module meant importing the repository above this one, which is what the aperture arm was
+    # moved out for. The cost is real and is stated rather than hidden: if the aperture moves to a
+    # different package, nothing here notices. `agience-ember`'s own suite is what tracks where the
+    # aperture lives, and `_INSTRUMENT_PACKAGES` below is what this file blocks.
+    aperture_pkg = "ember"
     assert aperture_pkg in _INSTRUMENT_PACKAGES, (
         "the aperture lives in %r and the proof does not block it — so this test would run with the "
         "instrument's own package importable and still report success. Add %r to "
