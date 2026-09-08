@@ -8,99 +8,92 @@
 
 **Condensation and routing — signal to content type.**
 
-Crystal condenses incoming signal into typed content and routes it. As the dispatcher/gateway it
-maps a request by its content type to one of the chorus tekton services (aria, astra, iris, lumen,
-ophan, sage, seraph) and carries the gateway concerns: identity, topology, and the MCP client.
-
-It reaches everything **over the wire**; nothing links it. Origin is called at `ORIGIN_URI` over
-HTTP, and the store is injected by the host rather than imported — crystal imports neither.
+Crystal condenses incoming signal into typed content and dispatches it. As a gateway it maps a
+request by its content type to the upstream service that owns it, and carries the gateway concerns:
+identity, topology, the type registry and the MCP client. Everything it depends on at runtime is
+reached over the wire and configured by URI.
 
 ## Install
 
-    pip install agience-crystal              # the contract and the ontology driver
-    pip install agience-crystal[service]     # the gateway that boots — fastapi, uvicorn, httpx, …
-    pip install agience-crystal[ontology]    # adds the coordinate, and numpy with it
-
-**The three are a measured split, not a preference.** 23 of crystal's 34 non-test modules import on
-`agience-prism` and the stdlib alone; 11 are the ones that serve, and those are what `[service]`
-carries. `[ontology]` is separate again because `crystal.ontology.geometry` imports numpy at module
-scope, and a gateway that never computes a coordinate should not install it.
+```bash
+pip install agience-crystal              # the contract and the ontology driver
+pip install 'agience-crystal[service]'   # the gateway that boots — fastapi, uvicorn, httpx, …
+pip install 'agience-crystal[ontology]'  # adds the coordinate, and numpy with it
+```
 
 Requires Python 3.11 or newer. The one base dependency is
-[`agience-prism`](https://pypi.org/project/agience-prism/), Apache-2.0, whose own base install has
-no dependencies at all.
+[`agience-prism`](https://pypi.org/project/agience-prism/).
+
+The split follows what each module imports: the base install is the contract, `[service]` is what
+`crystal.main` and `crystal.host` need to serve, and `[ontology]` is separate again because
+`crystal.ontology.geometry` imports numpy at module scope.
 
 ## Run it
 
-Crystal is two servable surfaces on the same package, and they are different jobs.
+Two servable surfaces on the same package.
 
-**The gateway** — routes a request by content type to the tekton that owns it:
+**The gateway** — routes a request by content type to the service that owns it:
 
-    pip install 'agience-crystal[service]'
-    CRYSTAL_HOST=127.0.0.1 CRYSTAL_PORT=8085 \
-    MANTLE_URI=http://localhost:8082 ORIGIN_URI=http://localhost:8080 \
-      python -m crystal.main
+```bash
+pip install 'agience-crystal[service]'
+CRYSTAL_HOST=127.0.0.1 CRYSTAL_PORT=8085 \
+MANTLE_URI=http://localhost:8082 ORIGIN_URI=http://localhost:8080 \
+  python -m crystal.main
+```
 
-**The host** — serves a set of tektons discovered at boot, assembling each with an embodiment:
+**The host** — serves a set of personas discovered at boot, assembling each with an embodiment:
 
-    MCP_HOST=127.0.0.1 MCP_PORT=8086 python -m crystal.host
+```bash
+MCP_HOST=127.0.0.1 MCP_PORT=8086 python -m crystal.host
+```
 
-Bind loopback and put a reverse proxy in front of anything public.
+Bind loopback and put a reverse proxy in front of anything public. A gateway whose upstreams are
+unreachable still starts, and answers what it can reach.
 
-Configuration is the environment, and it is read in two places:
+### Configuration
 
 | read by | variables |
 |---|---|
-| `config.py` — the gateway | `CRYSTAL_HOST`, `CRYSTAL_PORT` (8085), `CRYSTAL_EVENTS_ENABLED`, `MANTLE_URI`, `MANTLE_API_KEY`, `ORIGIN_URI`, `KEYS_DIR`, `EMBEDDINGS_URI`, `EMBEDDINGS_API_KEY`, `TYPE_CONTENT_TYPE`, `LOG_LEVEL` |
-| `host.py` — the tekton host | `MCP_HOST`, `MCP_PORT`, `CRYSTAL_UPSTREAMS`, `CRYSTAL_APEX_PERSONA`, `CRYSTAL_HOST_DOMAIN`, `CRYSTAL_TLS_CERT`, `CRYSTAL_TLS_KEY`, `LOG_LEVEL` |
+| [`config.py`](src/crystal/config.py) — the gateway | `CRYSTAL_HOST`, `CRYSTAL_PORT` (8085), `CRYSTAL_EVENTS_ENABLED`, `MANTLE_URI`, `MANTLE_API_KEY`, `ORIGIN_URI`, `KEYS_DIR`, `EMBEDDINGS_URI`, `EMBEDDINGS_API_KEY`, `TYPE_CONTENT_TYPE`, `LOG_LEVEL` |
+| [`host.py`](src/crystal/host.py) — the persona host | `MCP_HOST`, `MCP_PORT`, `CRYSTAL_UPSTREAMS`, `CRYSTAL_APEX_PERSONA`, `CRYSTAL_HOST_DOMAIN`, `CRYSTAL_TLS_CERT`, `CRYSTAL_TLS_KEY`, `LOG_LEVEL` |
+| [`type_registration.py`](src/crystal/type_registration.py) | `CRYSTAL_URI`, `CHORUS_PUBLIC_URI`, `AGIENCE_SERVER_HOST_URI`, when an upstream pushes its types |
 
-`type_registration.py` additionally reads `CRYSTAL_URI`, `CHORUS_PUBLIC_URI` and
-`AGIENCE_SERVER_HOST_URI` when a tekton pushes its types.
+## The injected embodiment
 
-A gateway with no Mantle and no Origin still starts; it answers what it can reach.
+The embodiment that measures arrives from the host at assembly time, through
+`crystal.ontology.driver.set_default_store_provider` and the `prism.embodiment` contract. The same
+crystal therefore runs against a full node and against a constrained store, with no import of
+either.
 
-## The embodiment is injected, never imported
+[`tests/test_embodiment_injection.py`](tests/) runs the suite against a stub embodiment written in
+numpy and the stdlib, and holds the base install to that allow-list — so the slot stays a real slot
+and `import crystal` stays free of the measuring stack.
 
-`import crystal` pulls no instrument and no numpy — checked in CI on a bare install, not asserted
-here. The embodiment that measures arrives from the host at assembly, which is what lets the same
-crystal run on a full node and on a constrained store.
+## Types
 
-**No test here reaches a real instrument either.** `tests/test_embodiment_injection.py` carries a
-stub embodiment written against `prism.embodiment` in numpy and the stdlib, and the suite runs on
-that — an implementation crystal knows nothing about, which is what makes the slot a real slot. The
-claim that the *instrument* the host hands over also fits is asserted in `agience-ember`, which
-imports crystal; making it from here would have meant importing the repository above this one.
+A content type is a directory: `type.json`, plus optional `schema.json`, `behaviors.json`,
+`preview.json` and `handlers/`. [`src/types/`](src/types/) holds the builtin skeletons — `text`,
+`image`, `audio`, `video`, `application` — as repository content read by a test, rather than as
+wheel payload, since nothing loads them from the package at runtime.
+
+An upstream owns its own types and pushes them to the gateway's `/register` endpoint at startup,
+signed with a service JWT. Types and personas are gateway state.
 
 ## Layout
 
-| Path | Purpose |
+| path | what it is |
 |---|---|
-| `src/crystal/` | The dispatcher/gateway service — dispatch, identity, topology, MCP client, registries, host and entrypoint. |
-| `src/crystal/ontology/` | The coordinate: coupling, geometry, lookup, freshness, transducer. Behind the `ontology` extra, because `geometry` imports numpy at module scope. |
-| `src/types/` | Builtin content-type skeletons — `type.json` plus optional `schema.json`, `behaviors.json`, `preview.json` and `handlers/`. Repository content, read by a test; **not shipped in the wheel**, because nothing at runtime loads it from the package. |
-| `tests/` | The suite, including the ratchets that hold the import boundaries above. |
-| `pyproject.toml` | Build, packaging and every dependency. There is no `requirements.txt` — the `service` extra is the one list. |
-
-A tekton owns its own types. Each one ships `ui/<top>/<sub>/type.json` and pushes it to the
-gateway's `/register` endpoint at host startup, signed with a service JWT. Types and tektons are
-gateway state; the store never sees them.
-
-## Where it sits
-
-    agience-prism   the contract, dependency-free   crystal depends on it
-    agience-crystal this repository                 the gateway
-    agience-mantle  the store                       a SIBLING — neither declares the other
-    agience-ember   the observer unit               declares crystal, and mantle, and prism
-
-Crystal is **below ember**: ember declares crystal, and crystal declares nothing of ember. Mantle is
-beside crystal, not above or below it — reached over the wire and imported by neither side.
+| [`src/crystal/`](src/crystal/) | dispatch, identity, topology, the MCP client, the registries, the host and the entrypoint |
+| [`src/crystal/ontology/`](src/crystal/ontology/) | the coordinate — `geometry` (the Jiang–Conrath coordinate and the dense basis), `driver` (the ambient read), `lookup`, `coupling`, `freshness`, `transducer`, `seed_lattice` |
+| [`src/types/`](src/types/) | the builtin content-type skeletons |
+| [`tests/`](tests/) | the suite, including the ratchets holding the import boundaries |
+| [`pyproject.toml`](pyproject.toml) | build, packaging and every dependency; the `service` extra is the one list |
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). The suite needs two public siblings — `agience-prism`, the
-package crystal declares, and `agience-mantle` for one file — and no environment variable, so a
-fork can run it.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md), which lists what the suite needs. It reads the environment
+for nothing, so a fork can run it once those packages are installed.
 
-## License
+Security issues: email **connect@agience.ai** rather than opening a public issue.
 
-Apache-2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
+Licensed under Apache-2.0 — see [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).

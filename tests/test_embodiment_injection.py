@@ -331,17 +331,14 @@ def test_the_two_embodiments_are_independent_implementations():
     """The control for every parametrised test below: if both parameters resolved to the same
     code, the whole file would be one embodiment run twice and would prove nothing."""
     assert prism_conservation.PathLedger is not _StubConservation.PathLedger
-    # The fourth assertion moved to `agience-ember` on 2026-08-25 [John]. It read
-    # `ember_optics.membrane_screen().__module__.startswith(...)` — a runtime check that the real
-    # instrument hands back the actual instrument, which is a fact about ember's function and named a
-    # package crystal may not name. It now lives in
-    # `agience-ember/tests/test_ember_holds_the_instrument.py` — search it for `membrane_screen`.
-    # That repo is its proper owner and may name the package; this one may not, which is why the
-    # pointer is a file rather than a test name.
+    # The runtime half of this control — that the real instrument hands back the actual instrument —
+    # is a fact about ember's own function and lives in
+    # `agience-ember/tests/test_ember_holds_the_instrument.py`; search it for `membrane_screen`.
+    # That repo may name the package this one may not, which is why the pointer here is a file
+    # rather than a test name. Both halves are needed: without the ember half this file's proof
+    # could run against two stubs and report success.
     #
-    # It was moved, not deleted, and the distinction matters here: without it this file's whole
-    # proof could run against two stubs and report success. The assertion below is the half that
-    # belongs to crystal — that the stub is genuinely local — and it is not a substitute for it.
+    # The assertion below is the half that belongs to crystal — that the stub is genuinely local.
     assert _StubEmbodiment.membrane_screen().__module__ == __name__, (
         "the stub screen must be defined HERE — an instrument class imported under another name "
         "would make the swap cosmetic")
@@ -349,11 +346,10 @@ def test_the_two_embodiments_are_independent_implementations():
 
 #: What the stub is allowed to stand on. Anything else fails.
 #:
-#: This was a deny-list of instrument names until 2026-08-25, and became an allow-list when a
-#: non-Agience brand was removed from crystal [John]. The guard did not weaken — it got stricter.
-#: A deny-list catches only the instruments somebody thought to name, so a stub that reached for a
-#: *different* measurement package passed; an allow-list catches every one of them, named or not.
-#: The rule the file actually means is "numpy and the standard library", and now it says so.
+#: An allow-list, not a deny-list of instrument names: a deny-list catches only the instruments
+#: somebody thought to name, so a stub that reached for a *different* measurement package would
+#: pass. An allow-list catches every one of them, named or not. The rule is "numpy and the standard
+#: library".
 _STUB_MAY_IMPORT = frozenset({"numpy", "math", "cmath", "statistics", "itertools", "functools",
                               "dataclasses", "typing", "collections", "operator", "types"})
 
@@ -400,18 +396,17 @@ def test_the_stub_embodiment_satisfies_the_prism_contract():
     assert isinstance(prism_conservation.PathLedger(_F, at="x"), Ledger)
 
 
-# Two tests moved to `agience-ember/tests/test_the_instrument_is_a_crystal_embodiment.py`, because
-# each needs the real instrument in the process:
+# Two properties need the real instrument in the process, so neither is asserted here:
 #
-#   test_NO_SINGLE_MODULE_FILLS_CONSERVATION_AND_THAT_IS_THE_DESIGN
-#       reads `ember.optics`'s half of the Conservation contract. Asserted there now.
+#   That no single module fills the Conservation contract, and that is the design — `ember.optics`'s
+#       half of it is read by
+#       `agience-ember/tests/test_the_instrument_is_a_crystal_embodiment.py`.
 #
-#   test_the_two_embodiments_agree_on_structure_and_are_free_to_disagree_on_the_number
-#       compared the instrument and the stub directly — same incident energy, `k` free to differ.
-#       IT IS NOT ASSERTED ANYWHERE NOW, and that is a real loss rather than a relocation: it needs
-#       both implementations in one process, and they are in two repositories that a wheel does not
-#       carry tests between. Getting it back means the stub moving to `prism`, which owns the
-#       contract both are written against. Recorded here so nobody concludes it was redundant.
+#   That the instrument and the stub agree on structure and are free to disagree on the number —
+#       same incident energy, `k` free to differ. Nothing asserts it: it needs both implementations
+#       in one process, and they are in two repositories that a wheel does not carry tests between.
+#       Asserting it again means the stub moving to `prism`, which owns the contract both are
+#       written against. Recorded here so nobody concludes it was redundant.
 
 
 
@@ -643,11 +638,12 @@ def test_the_contracts_are_fillable_from_different_places():
 #:
 #: `beam` stays in the set although it cannot resolve: banning it here keeps that a stated property
 #: of crystal's imports rather than an accident of a package that happens to be missing today.
-# A THIRD NAME — the library underneath the instrument — WAS REMOVED 2026-08-25 [John: crystal
-# must not name it]. `ember` is the load-bearing entry and stays: the instrument IS `ember.optics`, so
-# blocking `ember` makes the import fail on the ember leg and the self-check below still passes.
-# What is lost: a transitive pull of that library by some route OTHER than ember is no longer
-# blocked here. `agience-ember/tests/test_one_instrument.py` is the guard that still names it.
+#:
+#: `ember` is the load-bearing entry: the instrument is `ember.optics`, so blocking `ember` makes
+#: the import fail on the ember leg and the self-check below still passes. The library underneath
+#: the instrument is not named here, because crystal must not name it — so a transitive pull of that
+#: library by a route other than ember is not blocked here.
+#: `agience-ember/tests/test_one_instrument.py` is the guard that names it.
 _INSTRUMENT_PACKAGES = frozenset({"beam", "ember"})
 BLOCKED_NAMES = tuple(sorted(_INSTRUMENT_PACKAGES))
 
@@ -773,9 +769,9 @@ print("INJECTED OK")
 
 
 def test_the_whole_flow_runs_with_the_instrument_UNIMPORTABLE():
-    """Every other check in this file reads source or trusts an argument; this one makes `beam`,
-    and `ember` unimportable for real and then drives the complete capacitor flow —
-    conduct, couple, transmit, ledger, certificate — on an embodiment defined in the subprocess.
+    """Every other check in this file reads source or trusts an argument; this one makes `beam` and
+    `ember` unimportable for real and then drives the complete capacitor flow — conduct, couple,
+    transmit, ledger, certificate — on an embodiment defined in the subprocess.
 
     Source analysis cannot see an import through `importlib`, a `__getattr__` on module load, or a
     transitive pull from a sibling. This can. It asserts the blocker fires first, so a finder that
@@ -788,11 +784,10 @@ def test_the_whole_flow_runs_with_the_instrument_UNIMPORTABLE():
     # itself loads fine. The proof would silently narrow from "crystal runs without the instrument"
     # to "crystal runs without the library" with nothing to say so.
     #
-    # The name is a literal because this file no longer imports the instrument — deriving it from
-    # the module meant importing the repository above this one, which is what the instrument arm was
-    # moved out for. The cost is real and is stated rather than hidden: if the instrument moves to a
-    # different package, nothing here notices. `agience-ember`'s own suite is what tracks where the
-    # instrument lives, and `_INSTRUMENT_PACKAGES` below is what this file blocks.
+    # The name is a literal: deriving it from the module would mean importing the repository above
+    # this one. So if the instrument moves to a different package, nothing here notices.
+    # `agience-ember`'s own suite is what tracks where the instrument lives, and
+    # `_INSTRUMENT_PACKAGES` above is what this file blocks.
     instrument_pkg = "ember"
     assert instrument_pkg in _INSTRUMENT_PACKAGES, (
         "the instrument lives in %r and the proof does not block it — so this test would run with the "
@@ -884,8 +879,8 @@ def test_crystal_src_imports_no_instrument_anywhere():
 def test_importing_crystal_does_not_load_numpy():
     """The property the scan above is a proxy for, asserted directly.
 
-    `crystal/__init__.py` states that `import crystal` pulls no instrument at all — no beam, no
-    no instrument, no numpy — so that the gateway installs anywhere prism does.
+    `crystal/__init__.py` states that `import crystal` pulls no instrument at all — no `beam`, no
+    `ember`, no numpy — so that the gateway installs anywhere prism does.
     `crystal.ontology.geometry` is the one module in the package that imports numpy, which is what
     makes this claim need a test rather than being self-evident from the absence of any numpy
     import.

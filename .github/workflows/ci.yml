@@ -76,7 +76,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/agience-prism-py
-          path: .siblings/prism
+          path: .siblings/agience-prism-py
       # Mantle, for ONE test file. `tests/test_relation_signature.py` proves crystal's
       # counter-based relation signature against an independent `count(*)` on a real store, and
       # that argument needs the reference implementation — a double is written by the same hand as
@@ -85,13 +85,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/agience-mantle
-          path: .siblings/mantle
+          path: .siblings/agience-mantle
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
       - run: python -m pip install --upgrade pip setuptools
-      - run: pip install './.siblings/prism[wire,trust,vector]' ./.siblings/mantle
+      - run: pip install './.siblings/agience-prism-py[wire,trust,vector]' ./.siblings/agience-mantle
       # `service` is not optional for the SUITE even though it is optional for the package:
       # `test_dispatcher.py` and the route tests import `crystal.dispatcher`, which imports
       # fastapi at module scope. A developer machine hides this by having fastapi installed for
