@@ -130,10 +130,16 @@ def test_every_registrar_uses_it():
     notice — six hours later, on a gate that reads the live store."""
     import pathlib
 
-    chorus = pathlib.Path(evolution.__file__).resolve().parents[3] / "agience-chorus" / "src"
-    if not chorus.is_dir():
+    # ⛔ THE GUARD BELOW MUST CHECK THE PACKAGE, NOT ITS PARENT. This read
+    # `… / "agience-chorus" / "src"` and skipped when that was absent — but the personas moved
+    # into `src/agience_chorus/`, so `src/` went on existing while every path built from it
+    # stopped resolving. The skip never fired and the test failed with FileNotFoundError instead,
+    # which reads as a broken invariant rather than as a stale path.
+    chorus = (pathlib.Path(evolution.__file__).resolve().parents[3]
+              / "agience-chorus" / "src" / "agience_chorus")
+    if not (chorus / "lumen").is_dir():
         import pytest
-        pytest.skip("agience-chorus is not beside agience-crystal")
+        pytest.skip("agience-chorus personas are not beside agience-crystal")
 
     for rel in ("lumen/arithmetic.py", "lumen/dev_ops.py", "sage/operators.py", "astra/fetch.py"):
         src = (chorus / rel).read_text(encoding="utf-8-sig")

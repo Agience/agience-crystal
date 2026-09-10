@@ -89,10 +89,25 @@ def push_server_types(
     if not types:
         return 0
     base = (gateway_uri or os.getenv("CRYSTAL_URI") or "http://localhost:8085").rstrip("/")
+    # ⛔ THE FALLBACK PORT MUST FOLLOW `MCP_PORT`, and it used to be the literal 8082.
+    #
+    # This string becomes each persona's `endpoint` in crystal's topology — the address crystal
+    # dispatches every `mcp_tool` operation to. Hard-coding 8082 meant that on any node where the
+    # host binds elsewhere, and neither override is set, all seven personas registered an address
+    # nothing was listening on.
+    #
+    # That is not hypothetical. On srv the host binds 8085 and 8082 belongs to a different service
+    # entirely, so `POST /aria/mcp` on the advertised endpoint answered **404** while the real one
+    # answered 401 — and nothing noticed, because registration itself SUCCEEDS: crystal records
+    # whatever address it is handed, logs "Registered persona", and reports `personas_known: 7`.
+    # The registry looks perfect right up until an operation is dispatched.
+    #
+    # `MCP_PORT` is the same variable `crystal.host` reads to choose its bind port, so the
+    # advertised port now moves with it instead of being a second, independent constant.
     chorus_base = (
         os.getenv("CHORUS_PUBLIC_URI")
         or os.getenv("AGIENCE_SERVER_HOST_URI")
-        or "http://localhost:8082"
+        or f"http://localhost:{os.getenv('MCP_PORT', '8082')}"
     ).rstrip("/")
     payload = {
         "slug": server_name,
