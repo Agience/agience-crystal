@@ -571,8 +571,9 @@ def test_the_refusal_is_a_typed_prism_error_that_names_the_fix():
     # value rather than pinning a literal: `contract`, `member`, and `http_status`, the parts a
     # caller discriminates on, are asserted above and do not depend on the wording of `msg`.
     assert "ember.optics" in msg, (
-        "prism's `_FILLED_BY` no longer says `beam.optics`. If it now says `ember.optics`, the "
-        "cross-repo fix above has landed — change this to `ember.optics` and delete this note.")
+        "prism's `_FILLED_BY` no longer names `ember.optics`, which is the module a host should "
+        "inject for all four contract members. Follow the live value rather than pinning a new "
+        "literal here.")
 
 
 def test_a_misspelled_slot_is_not_silently_swallowed():
@@ -776,7 +777,8 @@ def test_the_whole_flow_runs_with_the_instrument_UNIMPORTABLE():
     Source analysis cannot see an import through `importlib`, a `__getattr__` on module load, or a
     transitive pull from a sibling. This can. It asserts the blocker fires first, so a finder that
     silently matched nothing would fail here instead of reporting a green run."""
-    # The blocked set is checked against the instrument itself, not against a remembered name.
+    # The blocked set is checked against a literal, and the paragraph below says why that is the
+    # best available option rather than a gap nobody noticed.
     #
     # A hand-maintained list of package names cannot catch a change of instrument package: dropping
     # `ember` from `_INSTRUMENT_PACKAGES` and from the program's `BLOCKED` would leave this whole

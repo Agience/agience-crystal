@@ -130,7 +130,7 @@ def test_every_registrar_uses_it():
     notice — six hours later, on a gate that reads the live store."""
     import pathlib
 
-    # ⛔ THE GUARD BELOW MUST CHECK THE PACKAGE, NOT ITS PARENT. This read
+    # THE GUARD BELOW MUST CHECK THE PACKAGE, NOT ITS PARENT. This read
     # `… / "agience-chorus" / "src"` and skipped when that was absent — but the personas moved
     # into `src/agience_chorus/`, so `src/` went on existing while every path built from it
     # stopped resolving. The skip never fired and the test failed with FileNotFoundError instead,

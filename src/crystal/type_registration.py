@@ -89,7 +89,7 @@ def push_server_types(
     if not types:
         return 0
     base = (gateway_uri or os.getenv("CRYSTAL_URI") or "http://localhost:8085").rstrip("/")
-    # ⛔ THE FALLBACK PORT MUST FOLLOW `MCP_PORT`, and it used to be the literal 8082.
+    # THE FALLBACK PORT MUST FOLLOW `MCP_PORT`, and it used to be the literal 8082.
     #
     # This string becomes each persona's `endpoint` in crystal's topology — the address crystal
     # dispatches every `mcp_tool` operation to. Hard-coding 8082 meant that on any node where the

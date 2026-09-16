@@ -1,6 +1,6 @@
 """The address a persona advertises must follow the port the host actually binds.
 
-⛔ WHY THIS EXISTS. `push_server_types` builds each persona's `endpoint` — the address crystal
+WHY THIS EXISTS. `push_server_types` builds each persona's `endpoint` — the address crystal
 dispatches every `mcp_tool` operation to. Its fallback was the literal `http://localhost:8082`
 while `crystal.host` chose its bind port from `MCP_PORT`. Two independent constants for one port.
 
@@ -48,7 +48,7 @@ def _endpoint(monkeypatch, **env) -> str:
 
 
 def test_the_advertised_port_follows_mcp_port(monkeypatch):
-    """⛔ THE REGRESSION. With MCP_PORT set and no override, the endpoint must name that port."""
+    """THE REGRESSION. With MCP_PORT set and no override, the endpoint must name that port."""
     ep = _endpoint(monkeypatch, MCP_PORT="8085")
     assert ep, "no endpoint was built — the capture hook missed; this test proves nothing"
     assert ":8085/" in ep, f"advertised {ep!r} while the host binds 8085"

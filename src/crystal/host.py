@@ -22,6 +22,13 @@ Config:
   MCP_HOST   — bind host (default 0.0.0.0)
   MCP_PORT   — bind port (default 8082)
   LOG_LEVEL  — logging level (default INFO)
+
+`MCP_PORT`'s DEFAULT IS MANTLE'S PORT IN THE STANDARD LOCAL LAYOUT. A node installed by
+`agience-observe` serves origin on 8080, mantle on 8082, crystal on 8085 and ember on 8091, so a
+host started here with nothing set tries to bind the port mantle already holds. Deployment never
+meets this — `agience-cloud/scripts/service_common.sh` passes `--port` explicitly — but a developer
+running this module directly does, and the failure arrives as a bind error naming a port they did
+not choose. Set `MCP_PORT` (or pass `--port`) when running locally.
 """
 
 from __future__ import annotations
@@ -126,6 +133,69 @@ async def _self_register_all(personas: Sequence[Any]) -> None:
         )
 
 
+#: How often the host re-checks that the gateway still knows it, in seconds.
+#:
+#: A GET of `/health` per interval, per host. Cheap enough to be frequent and slow enough not to
+#: matter; the cost of being wrong in the other direction is a node serving no types at all.
+_REGISTRATION_WATCH_SECONDS = float(os.getenv("CHORUS_REGISTRATION_WATCH_SECONDS", "30"))
+
+
+async def _gateway_persona_count() -> Optional[int]:
+    """`personas_known` from the gateway's `/health`, or None if it could not be read.
+
+    None is deliberately NOT zero. Unreachable and empty are different states — a gateway that is
+    down will come back holding whatever it had, while one that answers `0` has genuinely forgotten
+    — and re-registering into a socket that is refusing connections just burns the interval.
+    """
+    import httpx
+
+    base = (os.getenv("CRYSTAL_URI") or "http://localhost:8085").rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{base}/health")
+            resp.raise_for_status()
+            value = resp.json().get("personas_known")
+            return int(value) if isinstance(value, (int, float)) else None
+    except Exception:  # noqa: BLE001 — an unreadable gateway is a None, never a 0
+        return None
+
+
+async def _keep_registered(
+    personas: Sequence[Any],
+    *,
+    interval: float = _REGISTRATION_WATCH_SECONDS,
+    probe: Any = _gateway_persona_count,
+    register: Any = None,
+) -> None:
+    """Register at startup, then keep the gateway's knowledge of this host true.
+
+    ⛔ REGISTRATION USED TO BE A ONE-SHOT, AND THE GATEWAY'S REGISTRY IS IN MEMORY. Personas push
+    at host startup and `_self_register_all` returns for good once they all succeed — so a gateway
+    restart emptied the registry and nothing ever refilled it. Measured 2026-09-14: restarting the
+    node took `types_known` from 39 to 0, and it stayed 0 until the host itself was restarted by
+    hand. Every op dispatch and the whole type catalogue are dead in that window, with nothing
+    logging a reason.
+
+    ⚠ IT RE-PUSHES ONLY WHEN THE GATEWAY HAS FORGOTTEN, not on a timer. `POST /register` replaces a
+    persona's previous types — `remove_server` then re-add — so an unconditional re-push would open
+    a window on every tick where a type is briefly absent, and dispatch arriving in that window
+    would 404. Loss here is all-or-nothing (an in-memory registry does not lose one persona), so
+    `personas_known == 0` is the whole signal.
+    """
+    import asyncio
+
+    register = register or _self_register_all
+    await register(personas)
+    while True:
+        await asyncio.sleep(interval)
+        known = await probe()
+        if known == 0:
+            log.warning(
+                "gateway reports no registered personas — re-registering %d", len(personas)
+            )
+            await register(personas)
+
+
 def build_app(personas: Sequence[Any]) -> FastAPI:
     """Build the host FastAPI app around the given persona providers.
 
@@ -180,7 +250,9 @@ def build_app(personas: Sequence[Any]) -> FastAPI:
         # the background so persona serving isn't delayed while Mantle comes up. No shared catalog: the
         # host registers whatever operators the persona bindings carry (chorus owns the manifests; crystal
         # imports no tekton by name).
-        _reg_task = asyncio.create_task(_self_register_all(personas))
+        # Not `_self_register_all` directly: that returns for good once every persona has
+        # landed, and the gateway's registry does not survive its own restart.
+        _reg_task = asyncio.create_task(_keep_registered(personas))
         from crystal.push import register_manifests_with_retry as _reg_ops
 
         _manifest_ops = [op for p in personas for op in getattr(p, "operators", []) or []]
@@ -471,10 +543,22 @@ def build_app(personas: Sequence[Any]) -> FastAPI:
 
     # -- Discovery / index / health ----------------------------------------
     @app.get("/")
-    def index():
+    def index(request: Request):
+        # THE PORT IS READ OFF THE REQUEST, NOT OUT OF THE ENVIRONMENT. This reported
+        # `MCP_PORT` — an independent second opinion about where this process is listening, which
+        # is wrong whenever the bind comes from somewhere else. `uvicorn --port 9000` with the
+        # variable unset served on 9000 and announced 8082, and `agience-cloud`'s
+        # `service_common.sh` works around exactly that by exporting `MCP_PORT` alongside
+        # `--port`, in its own words: "unset, a service on 8085 tells callers it is on 8082".
+        #
+        # THE REQUEST IS THE RIGHT SOURCE, NOT THE SOCKET. Behind an edge the answer callers
+        # need is the address they used, which is what the Host header carries — a host bound to
+        # loopback behind Caddy on 443 should say 443, not its private port. `_discovery_entries`
+        # returns relative endpoints, so this is the only absolute addressing hint served here.
+        port = request.url.port or (443 if request.url.scheme == "https" else 80)
         return {
             "service": "crystal-host",
-            "port": int(os.getenv("MCP_PORT", "8082")),
+            "port": port,
             "servers": _discovery_entries(personas),
         }
 

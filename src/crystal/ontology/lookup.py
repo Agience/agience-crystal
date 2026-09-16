@@ -552,7 +552,7 @@ def hop_cost(store, src: str, dst: str, label: str) -> Optional[float]:
     A hapax translation — one edge out, one edge in — is the cheapest link in the graph. Measured
     2026-08-25, a best-first traversal minimising this cost placed `cn-singlish` on a Galician synset
     and `cn-nosode` on a Catalan one, because obscurity scores as certainty. The measure is sound;
-    reading it as proximity in MEANING is not. 📄 `agience-pharos/status/REACH-THE-WALK-2026-08-25.md`
+    reading it as proximity in MEANING is not. 📄 `_archive/2026-09-08-public-prune/agience-pharos/status/REACH-THE-WALK-2026-08-25.md`
     carries that measurement and why the traversal it belonged to was removed rather than tuned.
 """
     conn = store.artifacts.db.read()

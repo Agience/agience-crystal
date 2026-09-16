@@ -85,8 +85,11 @@ def test_build_app_mounts_only_injected_personas():
 def test_index_reflects_injected_personas():
     personas = _personas()
     app = host.build_app(personas)
-    index_route = next(r for r in app.routes if getattr(r, "path", "") == "/")
-    body = index_route.endpoint()
+    # Through a client, not by calling the endpoint object: `index` takes the request so it can
+    # report the address callers actually reached it on, and a direct call supplies no request.
+    from fastapi.testclient import TestClient
+
+    body = TestClient(app).get("/").json()
     assert [s["name"] for s in body["servers"]] == ["zeta", "qux"]
 
 

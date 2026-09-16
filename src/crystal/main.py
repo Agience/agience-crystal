@@ -205,6 +205,49 @@ async def resolve_type(content_type: str):
     }
 
 
+@app.get("/types/all")
+async def list_all_types():
+    """The whole registry, for a client hydrating its own.
+
+    A CLIENT CANNOT BOOTSTRAP FROM `/resolve`. That route answers about a content type the
+    caller already names, which is the right shape for dispatching an artifact in hand and the
+    wrong one for a browser starting empty: Facet ships generic viewers only, and which viewer a
+    type uses — with its `ui.record` and `resource_uri` — arrives from here
+    (`astra/web/src/context/contenttypes/ContentTypesProvider.tsx` hydrates before any artifact UI
+    renders). Without a list it would have to guess the names to ask for.
+
+    `raw` IS THE DEFINITION, NOT A SUMMARY. `/resolve` returns a projection — operations and the
+    describer — which is enough to dispatch and not enough to render; the `ui` block a viewer needs
+    lives only in what the persona pushed. Serving the projection here would look correct and lose
+    the one thing the caller came for.
+
+    AN EMPTY LIST IS A REAL ANSWER. It means no persona has registered — `/health` reports the
+    same thing as `personas_known: 0` — and the client falls back to its build-time primitives.
+    Logged, because at the wire an empty catalogue and an unpopulated one are the same bytes.
+
+    UNAUTHENTICATED, MATCHING `/resolve`, WHICH READS THE SAME REGISTRY. This is a gateway-
+    internal surface reached over the private network; `_require_platform_service` gates the
+    endpoints that WRITE (`/register`, `/embed`). If this gateway is ever put on a public edge,
+    that decision is what needs revisiting — not this route in isolation.
+    """
+    types = []
+    for content_type in app.state.types.known():
+        td = app.state.types.resolve(content_type)
+        if td is None:
+            continue
+        types.append({
+            "content_type": td.content_type,
+            "definition": td.raw,
+            "server": td.server,
+        })
+    if not types:
+        logger.info(
+            "types/all is empty: no persona has registered. Clients fall back to their "
+            "build-time primitives."
+        )
+    return {"types": types}
+
+
 @app.post("/create")
 async def create_artifact(request: Request, body: dict = Body(default_factory=dict)):
     """Create a new artifact. Resolves `content_type` (from the body) to its
