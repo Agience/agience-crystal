@@ -19,8 +19,15 @@ from crystal.type_registry import BUILTIN_SERVER, TypeRegistry
 TYPES = Path(__file__).resolve().parent.parent / "src" / "types"
 WORKSPACE = "application/vnd.agience.workspace+json"
 COLLECTION = "application/vnd.agience.collection+json"
-MARKET_SERIES = (Path(__file__).resolve().parents[2] / "agience-chorus" / "src" / "agience_chorus"
-                 / "ophan" / "ui" / "application" / "vnd.agience.market-series+json" / "type.json")
+#: Ophan's market-series type, as chorus ships it, cut to what registration reads: no operations, the
+#: collection type in `inherits`. Held here, so this suite needs no sibling checkout.
+MARKET_SERIES = {
+    "content_type": "application/vnd.agience.market-series+json",
+    "version": 1,
+    "inherits": [COLLECTION],
+    "context_schema": {"symbol": {"type": "string", "index": ["lexical"], "mutable": False}},
+    "ui": {"id": "market-series", "label": "Market Series", "is_container": True},
+}
 
 
 def _builtins() -> TypeRegistry:
@@ -56,7 +63,7 @@ def test_an_operation_nothing_in_the_lineage_declares_is_still_absent():
 def test_a_persona_type_inherits_a_builtin():
     """Ophan's market series declares no operations and inherits the collection type."""
     registry = _builtins()
-    definition = json.loads(MARKET_SERIES.read_text(encoding="utf-8-sig"))
+    definition = json.loads(json.dumps(MARKET_SERIES))
     assert registry.register(definition, server="ophan")
     assert registry.resolve_operation(definition["content_type"], "read") is not None
 
