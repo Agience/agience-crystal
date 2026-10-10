@@ -310,7 +310,7 @@ def retire(store, operator_id: str, *, far: float = DEFAULT_RETIREMENT_FAR) -> b
 
 
 def sweep_retire(store, *, far: float = DEFAULT_RETIREMENT_FAR) -> List[str]:
-    """Selection pressure, applied: retire every committed operator reality has spoken against, in
+    """Selection pressure, applied: retire every live operator reality has spoken against, in
     one pass. Returns the ids retired. Unproven operators are always spared — you condemn an
     observer only once its own evidence can tell it apart from one nothing is known about."""
     retired: List[str] = []

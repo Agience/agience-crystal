@@ -32,6 +32,12 @@ log = logging.getLogger(__name__)
 # How long to wait before retrying Mantle after a failed persona-map refresh.
 _REFRESH_BACKOFF_S = 30.0
 
+# The shortest interval between two refreshes triggered by a lookup miss. A miss is caused by the
+# caller, who chooses the UUID, so without this every request for an unknown UUID would cost a
+# Mantle round-trip. The persona registry changes when a persona registers, which is rare, so a
+# persona added since the last refresh is found within this interval.
+_MISS_REFRESH_INTERVAL_S = 30.0
+
 
 class PersonaMap:
     """Cached deployment-specific slug↔UUID map populated from Mantle."""
@@ -42,6 +48,7 @@ class PersonaMap:
         self._uuid_to_slug: dict[str, str] = {}
         self._loaded = False
         self._next_retry_at: float = 0.0
+        self._last_miss_refresh: float = float("-inf")
 
     def refresh(self) -> bool:
         """Fetch the persona registry from Mantle. Returns True on success.
@@ -78,7 +85,10 @@ class PersonaMap:
         return True
 
     def slug_for_uuid(self, server_id: str) -> Optional[str]:
-        """Resolve a UUID to a persona slug. Refreshes on miss."""
+        """Resolve a UUID to a persona slug.
+
+        A miss refreshes the map at most once per `_MISS_REFRESH_INTERVAL_S`, however many distinct
+        UUIDs miss in that time; within the interval a miss answers None without calling Mantle."""
         if not self._loaded:
             if not self.refresh():
                 # Mantle unreachable — cannot resolve yet.
@@ -86,6 +96,10 @@ class PersonaMap:
         slug = self._uuid_to_slug.get(server_id)
         if slug is not None:
             return slug
+        now = time.monotonic()
+        if now - self._last_miss_refresh < _MISS_REFRESH_INTERVAL_S:
+            return None
+        self._last_miss_refresh = now
         if self.refresh():
             return self._uuid_to_slug.get(server_id)
         return None
@@ -160,7 +174,21 @@ class UniversalMCPGatewayMiddleware:
             await self._app(scope, receive, send)
             return
 
-        # Not a persona — try a generic artifact lookup for external/relay kinds.
+        # Not a persona. What remains is a relay server, which needs an authenticated user, or an
+        # external one, which is refused either way. So when this gateway can resolve a user, an
+        # unauthenticated caller is answered here, before the artifact lookup: the UUID is the
+        # caller's choice, and the lookup is a Mantle call per request.
+        user_id: Optional[str] = None
+        if self._user_id_resolver is not None:
+            user_id = self._user_id_resolver(scope)
+            if not user_id:
+                await _send_json_status(
+                    send, 401,
+                    {"error": "Unknown server_id, or one that requires an authenticated user"},
+                )
+                return
+
+        # A generic artifact lookup for external/relay kinds.
         # get_artifact is a sync httpx call — run in executor.
         artifact = await loop.run_in_executor(
             None,
@@ -198,7 +226,6 @@ class UniversalMCPGatewayMiddleware:
                     {"error": "Relay dispatch is not configured on this Chorus instance"},
                 )
                 return
-            user_id = self._user_id_resolver(scope)
             if not user_id:
                 await _send_json_status(
                     send, 401,
@@ -215,6 +242,17 @@ class UniversalMCPGatewayMiddleware:
             return
 
         await _send_json_status(send, 502, {"error": f"Unknown mcp-server kind: {kind!r}"})
+
+
+#: Request headers the relay never carries to the desktop runtime. The caller's credentials were
+#: already checked here and are no business of the local MCP servers the runtime hands the request
+#: to; the forwarding and hop-by-hop headers describe this hop, not the next one.
+_NOT_RELAYED = frozenset({
+    "authorization", "cookie", "proxy-authorization",
+    "x-forwarded-for", "x-forwarded-proto", "x-forwarded-host", "x-real-ip", "forwarded",
+    "connection", "keep-alive", "te", "trailer", "transfer-encoding", "upgrade", "host",
+    "content-length",
+})
 
 
 async def _proxy_via_relay(
@@ -240,7 +278,10 @@ async def _proxy_via_relay(
         path = f"{path}?{raw_query.decode('latin-1')}"
     headers: dict[str, str] = {}
     for k, v in (scope.get("headers") or []):
-        headers[k.decode("latin-1")] = v.decode("latin-1")
+        name = k.decode("latin-1")
+        if name.lower() in _NOT_RELAYED:
+            continue
+        headers[name] = v.decode("latin-1")
 
     # Drain inbound body
     body = b""

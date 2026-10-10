@@ -48,7 +48,7 @@ class OperatorRegistry:
         side-cars: the artifact carries the spec, and the address is derived from the artifact."""
         doc = dict(definition)
         doc.setdefault("content_type", OPERATOR_CONTENT_TYPE)
-        doc.setdefault("state", "committed")
+        doc.setdefault("state", "live")
         problems = validate_operator(doc)
         if problems:
             raise ValueError("operator %r failed schema validation: %s"

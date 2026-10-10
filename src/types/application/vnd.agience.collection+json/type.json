@@ -36,21 +36,6 @@
       ],
       "observe": { "enabled": true, "transports": ["sse", "websocket"] }
     },
-    "commit": {
-      "enabled": true,
-      "requires_grant": "update",
-      "dispatch": { "kind": "native", "target": "workspace_service.dispatch_commit" },
-      "emits": [
-        { "event": "collection.commit.started",   "phase": "before" },
-        { "event": "collection.commit.completed", "phase": "after"  },
-        { "event": "collection.commit.failed",    "phase": "error"  }
-      ]
-    },
-    "commit_preview": {
-      "enabled": true,
-      "requires_grant": "read",
-      "dispatch": { "kind": "native", "target": "workspace_service.dispatch_commit_preview" }
-    },
     "export": {
       "enabled": true,
       "requires_grant": "read",

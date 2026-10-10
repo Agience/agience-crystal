@@ -348,6 +348,40 @@ async def test_relay_kind_with_manager_forwards_request():
 
 
 @pytest.mark.asyncio
+async def test_the_relay_carries_no_credentials_or_forwarding_headers():
+    """The caller's credentials were checked here; the desktop runtime and the local MCP servers
+    it hands a request to get the request, not the caller's bearer token or cookies."""
+    import base64
+    uuid = "33333333-4444-5555-6666-777777777777"
+    seen = {}
+
+    async def fake_forward(**kwargs):
+        seen.update(kwargs["headers"])
+        return {"ok": True, "status": 200, "headers": {},
+                "body": base64.b64encode(b"{}").decode("ascii")}
+
+    mw, _fake_app, _ = _build_mw_with_relay(
+        artifact={"context": '{"mcp_server": {"kind": "relay"}}'},
+        forward_impl=fake_forward,
+    )
+    scope = _build_scope(f"/{uuid}/mcp")
+    scope["headers"] = [
+        (b"authorization", b"Bearer caller-token"),
+        (b"Cookie", b"session=abc"),
+        (b"x-forwarded-for", b"198.51.100.7"),
+        (b"host", b"chorus.agience.ai"),
+        (b"content-type", b"application/json"),
+        (b"mcp-session-id", b"s-1"),
+    ]
+    sent = await _drive(mw, scope)
+    assert sent[0]["status"] == 200
+    lowered = {k.lower() for k in seen}
+    assert not lowered & {"authorization", "cookie", "x-forwarded-for", "host"}, seen
+    assert seen.get("content-type") == "application/json"
+    assert seen.get("mcp-session-id") == "s-1"
+
+
+@pytest.mark.asyncio
 async def test_relay_kind_no_user_returns_401():
     """Relay dispatch needs a user identity. Anonymous → 401."""
     uuid = "33333333-4444-5555-6666-777777777777"

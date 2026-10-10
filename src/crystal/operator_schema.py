@@ -12,7 +12,7 @@ An operator artifact is the pattern half of execution (pattern × capability). I
 
     id              str   — the operator id ("op.math.add")
     content_type    str   — OPERATOR_CONTENT_TYPE
-    state           str   — "committed" (draft while authoring)
+    state           str   — "live", or "archived" once retired
     offer           str|dict — the transformation it advertises (the discoverable claim)
     needs           list  — capability kinds it requires (from CAPABILITY_KINDS)
     content         str   — the pattern itself (spec/code) or "" with content_ref → CAS bundle

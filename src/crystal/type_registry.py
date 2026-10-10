@@ -12,11 +12,16 @@ the gateway holds the live registry. **Mantle never sees types** — it stores a
 """
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+#: The `server` a builtin type is recorded under.
+BUILTIN_SERVER = "crystal"
 
 
 def normalize_ct(content_type: str) -> str:
@@ -96,10 +101,26 @@ def parse_type_def(definition: dict, *, server: Optional[str] = None) -> Optiona
 
 
 class TypeRegistry:
-    """In-memory `content_type → TypeDefinition`, populated by persona registration."""
+    """In-memory `content_type → TypeDefinition`.
+
+    Two sources, one lookup. Personas register the types they own (`register`, replaced wholesale
+    when a persona re-registers). The gateway's builtin types — the collection, the workspace,
+    the base types others name in `inherits` — are loaded once at startup (`load_builtin`) and
+    kept apart, so a persona re-registering never removes them; a type a persona registers under
+    the same content type takes precedence over the builtin.
+
+    `inherits` is resolved here. A type answers for the operations it declares, and for each one
+    it does not declare, for the first of its `inherits` (in order, depth first) that does — so a
+    workspace, which declares only `create`, reads, updates and deletes as a collection does.
+    """
+
+    #: How deep an `inherits` chain is followed. Shipped chains are one or two links; this only
+    #: stops a malformed definition from walking forever.
+    MAX_INHERITANCE_DEPTH = 8
 
     def __init__(self) -> None:
         self._cache: Dict[str, TypeDefinition] = {}
+        self._builtin: Dict[str, TypeDefinition] = {}
 
     def register(self, definition: dict, *, server: Optional[str] = None) -> bool:
         td = parse_type_def(definition, server=server)
@@ -109,12 +130,70 @@ class TypeRegistry:
         self._cache[td.content_type] = td
         return True
 
+    def load_builtin(self, root: Path) -> int:
+        """Load every `<top>/<sub>/type.json` under ``root`` as a builtin type (`_wildcard` names
+        the category, `<top>/*`). Returns how many loaded; a missing ``root`` loads none."""
+        if not root.is_dir():
+            logger.warning("No builtin types at %s: inheritance resolves among persona types only",
+                           root)
+            return 0
+        n = 0
+        for path in sorted(root.glob("*/*/type.json")):
+            top, sub = path.parent.parent.name, path.parent.name
+            try:
+                definition = json.loads(path.read_text(encoding="utf-8-sig"))
+            except (OSError, ValueError):
+                logger.warning("Skipping unreadable builtin type at %s", path)
+                continue
+            if not isinstance(definition, dict):
+                continue
+            definition.setdefault("content_type", f"{top}/{'*' if sub == '_wildcard' else sub}")
+            td = parse_type_def(definition, server=BUILTIN_SERVER)
+            if td is not None:
+                self._builtin[td.content_type] = td
+                n += 1
+        logger.info("Loaded %d builtin type(s) from %s", n, root)
+        return n
+
     def resolve(self, content_type: str) -> Optional[TypeDefinition]:
-        return self._cache.get(normalize_ct(content_type))
+        ct = normalize_ct(content_type)
+        return self._cache.get(ct) or self._builtin.get(ct)
+
+    def _lineage(self, content_type: str) -> List[TypeDefinition]:
+        """The type, then each type it inherits from, depth first in declared order, each once."""
+        out: List[TypeDefinition] = []
+        seen = set()
+
+        def walk(ct: str, depth: int) -> None:
+            ct = normalize_ct(ct)
+            if ct in seen or depth > self.MAX_INHERITANCE_DEPTH:
+                return
+            seen.add(ct)
+            td = self.resolve(ct)
+            if td is None:
+                return
+            out.append(td)
+            parents = td.raw.get("inherits") if isinstance(td.raw, dict) else None
+            for parent in parents if isinstance(parents, list) else []:
+                if isinstance(parent, str):
+                    walk(parent, depth + 1)
+
+        walk(content_type, 0)
+        return out
+
+    def operations_of(self, content_type: str) -> Dict[str, OperationSpec]:
+        """Every operation the type answers for, its own and inherited; its own win."""
+        ops: Dict[str, OperationSpec] = {}
+        for td in reversed(self._lineage(content_type)):
+            ops.update(td.operations)
+        return ops
 
     def resolve_operation(self, content_type: str, op_name: str) -> Optional[OperationSpec]:
-        td = self.resolve(content_type)
-        return td.operations.get(op_name) if td else None
+        for td in self._lineage(content_type):
+            op = td.operations.get(op_name)
+            if op is not None:
+                return op
+        return None
 
     def describer_for(self, content_type: str) -> Optional[dict]:
         td = self.resolve(content_type)
@@ -134,4 +213,4 @@ class TypeRegistry:
             self._cache.pop(normalize_ct(content_type), None)
 
     def known(self) -> List[str]:
-        return sorted(self._cache.keys())
+        return sorted(set(self._cache) | set(self._builtin))

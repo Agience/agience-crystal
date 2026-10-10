@@ -4,7 +4,7 @@
   "inherits": [
     "application/vnd.agience.collection+json"
   ],
-  "description": "Agience Workspace — a Collection (and therefore an Artifact) that FACET loads into the editing view. The ONLY things that make it a workspace are the `bindings` context (named role links FACET reads) and the dedicated viewer. Every operation — read/update/delete/commit/commit_preview/revert/search/export — is inherited from the collection type. The single workspace-specific override is `create`, which stamps the workspace content_type and seeds default bindings.",
+  "description": "Agience Workspace — a Collection (and therefore an Artifact) that FACET loads into the editing view. The ONLY things that make it a workspace are the `bindings` context (named role links FACET reads) and the dedicated viewer. It names the collection type in `inherits` for read/update/delete/export and declares one operation of its own, `create`, which stamps the workspace content_type and seeds default bindings.",
   "context_schema": {
     "bindings": {
       "type": "object",

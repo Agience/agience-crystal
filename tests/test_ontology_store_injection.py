@@ -91,7 +91,7 @@ def _ontology(word="delta"):
     empty one, which is the whole distinction under test."""
     st = _Store()
     st.artifacts.put_artifact({
-        "id": "wn-%s.n.01" % word, "content_type": "text/x-wordnet", "state": "committed",
+        "id": "wn-%s.n.01" % word, "content_type": "text/x-wordnet", "state": "live",
         "name": "%s.n.01" % word, "pos": "n", "lemmas": [word], "lemma_counts": {word: 1},
         "hypernyms": [], "instance_hypernyms": [], "ic": 0.5,
     })

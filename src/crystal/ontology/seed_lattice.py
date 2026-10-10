@@ -136,7 +136,7 @@ def persist_ic(store, idx, docs, *, author: str = DEFAULT_AUTHOR,
     # part-way leaves the basis stale and the next load re-derives, rather than claiming a
     # corpus-wide measurement that only half landed.
     arts.put_artifact({
-        "id": _wn.IC_BASIS_ID, "content_type": _wn.IC_BASIS_CT, "state": "committed",
+        "id": _wn.IC_BASIS_ID, "content_type": _wn.IC_BASIS_CT, "state": "live",
         "basis": {"source": _wn.INTRINSIC_IC_SOURCE, "n": len(idx),
                   "formula": _wn.INTRINSIC_IC_FORMULA},
         "content": "information content over %d synsets, %s (%s)"
@@ -347,7 +347,7 @@ def persist_conceptnet_ic(store, *, author: str = DEFAULT_AUTHOR,
     # The basis, written after the values it describes — a run that dies part-way leaves no claim
     # that a corpus-wide measurement landed.
     arts.put_artifact({
-        "id": CN_IC_BASIS_ID, "content_type": "geom.ic-basis", "state": "committed",
+        "id": CN_IC_BASIS_ID, "content_type": "geom.ic-basis", "state": "live",
         "basis": {"source": CN_IC_SOURCE, "n": len(ic), "formula": CN_IC_FORMULA},
         "content": "ConceptNet information content over %d concepts, %s (%s)"
                    % (len(ic), CN_IC_FORMULA, CN_IC_SOURCE),
@@ -456,7 +456,7 @@ def relation_vertices(store, *, author: str = DEFAULT_AUTHOR) -> int:
                 "relation_vertices: relation %r has no measured extent. A relation artifact is "
                 "an OBSERVED measurement and will not be written from an unmeasured one." % lab)
         arts.put_artifact({
-            "id": RELATION_PREFIX + lab, "content_type": RELATION_CT, "state": "committed",
+            "id": RELATION_PREFIX + lab, "content_type": RELATION_CT, "state": "live",
             "kind": "relation", "spec": dict(sig, basis=RELATION_BASIS, label=lab),
             "context": "ontology relation — %s" % lab,
             "content": "the relation `%s`, as the corpus uses it: %d edges, symmetry %.3f%s"
@@ -585,7 +585,7 @@ def build(store, *, lang: str = "en", author: str = DEFAULT_AUTHOR,
     from prism.grounding import TRANSDUCER_OP
     gid = TRANSDUCER_OP + "language." + lang
     gdoc = {
-        "id": gid, "content_type": TRANSDUCER_CT, "state": "committed", "kind": "transducer",
+        "id": gid, "content_type": TRANSDUCER_CT, "state": "live", "kind": "transducer",
         "spec": spec,
         "context": "language:%s transducer — surface↔concept conversion" % lang,
         "content": "language:%s transducer (data-driven): lemma↔synset over the shared lattice" % lang,

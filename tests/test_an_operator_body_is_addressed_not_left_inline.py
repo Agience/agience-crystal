@@ -60,7 +60,7 @@ class _Store:
 
 
 def _doc(i="op.math.add", body="adds two numbers"):
-    return {"id": i, "content_type": OPERATOR_CT, "state": "committed",
+    return {"id": i, "content_type": OPERATOR_CT, "state": "live",
             "collection_id": "stage.system", "content": body, "created_by": "ember-local"}
 
 

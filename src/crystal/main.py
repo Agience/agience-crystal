@@ -11,12 +11,16 @@ See agience-pharos/dev-legacy/dev-features/chorus-core-gateway.md.
 from __future__ import annotations
 
 import logging
+import os
+import re
 import secrets
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import List, Optional
 
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 import asyncio
@@ -49,6 +53,37 @@ def _require_bearer(request: Request) -> str:
     if not token:
         raise HTTPException(status_code=401, detail="Bearer token required")
     return token
+
+
+def _require_reader(request: Request) -> None:
+    """Gate a read of the type registry (`/types/all`, `/resolve/*`) to an authenticated caller.
+
+    The registry holds every persona's type definitions: operation targets, the persona that
+    serves each type, and the `ui` blocks. The gateway answers on the public edge (browsers call it
+    cross-origin, hence the CORS policy below), and its only browser consumer, Facet's
+    `ContentTypesProvider`, runs behind `LoginProtected` and sends the signed-in user's token. So a
+    caller must present either an Origin access token (`prism.trust.verify_access_token`, which
+    refuses refresh, email-verification and password-reset tokens) or a platform service token.
+
+    No authority manifest follows `_require_platform_service`: KEYS_DIR set means refuse (503),
+    KEYS_DIR unset is the dev/standalone mode and stays open."""
+    anchors = getattr(request.app.state, "trust_anchors", {}) or {}
+    if not anchors:
+        if config.KEYS_DIR:
+            logger.error("gateway: KEYS_DIR=%s is set but no usable authority manifest was found "
+                         "there — refusing a registry read", config.KEYS_DIR)
+            raise HTTPException(status_code=503, detail="gateway authority manifest unavailable")
+        return
+    token = _bearer(request)
+    if not token:
+        raise HTTPException(status_code=401, detail="authentication required")
+    if verify_service_token(token, anchors):
+        return
+    try:
+        from prism.trust.authority_trust import verify_access_token
+        verify_access_token(token, delegation_audiences=())
+    except Exception:
+        raise HTTPException(status_code=401, detail="invalid access token")
 
 
 def _require_platform_service(request: Request, *, static_key: str = "") -> None:
@@ -102,6 +137,11 @@ logger = logging.getLogger("agience.crystal")
 async def lifespan(app: FastAPI):
     app.state.mantle = MantleClient(config.MANTLE_URI, config.MANTLE_API_KEY)
     app.state.types = TypeRegistry()
+    # The builtin types: the collection, the workspace, and the base types others name in
+    # `inherits`. They live beside the package in a source checkout (`src/types`, which Facet's
+    # build reads too); `CRYSTAL_TYPES_DIR` points elsewhere for an install that has none there.
+    app.state.types.load_builtin(Path(
+        os.getenv("CRYSTAL_TYPES_DIR") or Path(__file__).resolve().parent.parent / "types"))
     app.state.topology = Topology()
     # Crystal service identity (optional) — enables event-driven describers.
     app.state.identity = CrystalIdentity.load(config.KEYS_DIR, config.ORIGIN_URI)
@@ -140,6 +180,83 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Agience Crystal (gateway)", lifespan=lifespan)
 
+
+#: The POST routes whose body this gateway parses. FastAPI reads and parses a route's body before
+#: the handler runs, so the handler's own credential check comes after the parse.
+_GATED_BODY = re.compile(r"^/(?:register|create|artifacts/[^/]+/op/[^/]+)/?$")
+
+
+class _BodyGate:
+    """Check the credential, then cap the body, before FastAPI parses `/register`, `/create` or an
+    operation.
+
+    The same checks the handlers make (`_require_platform_service` for `/register`,
+    `_require_bearer` for the others), run first, so an unauthenticated caller costs no JSON parse.
+    The body is then read up to `config.MAX_BODY_BYTES`: a declared `Content-Length` over it is
+    refused before anything is read, and a chunked body is refused as soon as it passes it. What
+    was read is replayed to the app, so the handler sees the request unchanged."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if (scope["type"] != "http" or scope.get("method") != "POST"
+                or not _GATED_BODY.match(scope.get("path", ""))):
+            await self.app(scope, receive, send)
+            return
+        request = Request(scope)
+        try:
+            if scope["path"].rstrip("/") == "/register":
+                _require_platform_service(request)
+            else:
+                _require_bearer(request)
+        except HTTPException as exc:
+            await JSONResponse({"detail": exc.detail}, status_code=exc.status_code)(scope, receive, send)
+            return
+
+        limit = config.MAX_BODY_BYTES
+        too_large = JSONResponse(
+            {"detail": f"request body exceeds this gateway's limit of {limit} bytes "
+                       "(CRYSTAL_MAX_BODY_BYTES)"}, status_code=413)
+        declared = request.headers.get("content-length")
+        if declared is not None:
+            try:
+                if int(declared) > limit:
+                    await too_large(scope, receive, send)
+                    return
+            except ValueError:
+                await JSONResponse({"detail": "invalid Content-Length"}, status_code=400)(
+                    scope, receive, send)
+                return
+
+        chunks, size, more = [], 0, True
+        while more:
+            message = await receive()
+            if message["type"] != "http.request":
+                return                                  # the client went away
+            body = message.get("body", b"")
+            size += len(body)
+            if size > limit:
+                await too_large(scope, receive, send)
+                return
+            chunks.append(body)
+            more = message.get("more_body", False)
+
+        replayed = False
+
+        async def replay():
+            nonlocal replayed
+            if not replayed:
+                replayed = True
+                return {"type": "http.request", "body": b"".join(chunks), "more_body": False}
+            return await receive()
+
+        await self.app(scope, replay, send)
+
+
+# Added before CORS, so CORS wraps it and a refusal here still carries the CORS headers a browser
+# needs to read it.
+app.add_middleware(_BodyGate)
 # CORS — facet (browser) and external SDK callers dispatch artifact operations
 # through the gateway cross-origin, so it needs the same open-but-Bearer-only
 # policy as Mantle. allow_origins=["*"] is safe: every authenticated call carries
@@ -189,8 +306,11 @@ async def health():
 
 
 @app.get("/resolve/{content_type:path}")
-async def resolve_type(content_type: str):
-    """Debug: resolve a content_type to its operations (from the type registry)."""
+async def resolve_type(content_type: str, request: Request):
+    """Debug: resolve a content_type to its operations, its own and inherited (the type registry).
+
+    Gated by `_require_reader`, as `/types/all` is."""
+    _require_reader(request)
     td = app.state.types.resolve(content_type)
     if td is None:
         raise HTTPException(status_code=404, detail=f"No type definition for '{content_type}'")
@@ -199,14 +319,14 @@ async def resolve_type(content_type: str):
         "server": td.server,
         "operations": {
             name: {"kind": op.kind, "target": op.target, "requires_grant": op.requires_grant}
-            for name, op in td.operations.items()
+            for name, op in app.state.types.operations_of(content_type).items()
         },
         "describer": td.describer,
     }
 
 
 @app.get("/types/all")
-async def list_all_types():
+async def list_all_types(request: Request):
     """The whole registry, for a client hydrating its own.
 
     A CLIENT CANNOT BOOTSTRAP FROM `/resolve`. That route answers about a content type the
@@ -225,11 +345,11 @@ async def list_all_types():
     same thing as `personas_known: 0` — and the client falls back to its build-time primitives.
     Logged, because at the wire an empty catalogue and an unpopulated one are the same bytes.
 
-    UNAUTHENTICATED, MATCHING `/resolve`, WHICH READS THE SAME REGISTRY. This is a gateway-
-    internal surface reached over the private network; `_require_platform_service` gates the
-    endpoints that WRITE (`/register`, `/embed`). If this gateway is ever put on a public edge,
-    that decision is what needs revisiting — not this route in isolation.
+    AUTHENTICATED, MATCHING `/resolve`, WHICH READS THE SAME REGISTRY. The gateway answers on the
+    public edge, and the registry names every persona's operation targets; its one browser caller
+    hydrates after sign-in and sends the user's token. `_require_reader` states the rule.
     """
+    _require_reader(request)
     types = []
     for content_type in app.state.types.known():
         td = app.state.types.resolve(content_type)

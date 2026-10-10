@@ -23,6 +23,12 @@ TYPE_CONTENT_TYPE = os.getenv("TYPE_CONTENT_TYPE", "application/vnd.agience.type
 
 # Listen port.
 CRYSTAL_PORT = _int("CRYSTAL_PORT", 8085)
+
+# The largest request body the gateway reads on `POST /register`, `POST /create` and
+# `POST /artifacts/{id}/op/{op}`, in bytes. These bodies are parsed into Python objects in this
+# process, which costs several times their size; content larger than this goes to Mantle's
+# `PUT /artifacts/{id}/content`, which streams it.
+MAX_BODY_BYTES = _int("CRYSTAL_MAX_BODY_BYTES", 16 * 1024 * 1024)
 CRYSTAL_HOST = os.getenv("CRYSTAL_HOST", "0.0.0.0")
 
 # Crystal service identity + event-driven describers. KEYS_DIR holds

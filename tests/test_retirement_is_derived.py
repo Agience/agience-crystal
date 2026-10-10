@@ -31,7 +31,7 @@ class _Capture:
 
 
 def _op(oid="op.x", *, verified=0, refuted=0, invocations=0, uses=0):
-    return {"id": oid, "content_type": E.OPERATOR_CONTENT_TYPE, "state": "committed",
+    return {"id": oid, "content_type": E.OPERATOR_CONTENT_TYPE, "state": "live",
             "verified": verified, "refuted": refuted,
             "invocations": invocations, "output_uses": uses}
 

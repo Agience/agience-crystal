@@ -85,6 +85,14 @@ def _persona_slugs(personas: Sequence[Any]) -> set[str]:
     return {p.name for p in personas}
 
 
+def _persona_client_ids(personas: Sequence[Any]) -> frozenset[str]:
+    """The server client ids this host answers to: the `aud` of a delegation minted for a persona.
+
+    `agience-server-<name>` unless the persona names its own, the same default
+    `persona_registration.register_persona` applies."""
+    return frozenset(getattr(p, "client_id", None) or f"agience-server-{p.name}" for p in personas)
+
+
 def _discovery_entries(personas: Sequence[Any]) -> list[dict]:
     return [
         {
@@ -271,18 +279,22 @@ def build_app(personas: Sequence[Any]) -> FastAPI:
     app = FastAPI(title="Agience Crystal Host", lifespan=lifespan)
 
     # -- Universal MCP gateway middleware (UUID -> slug routing) --------------
-    from prism.trust.authority_trust import verify_jwt as _verify_jwt
+    from prism.trust.authority_trust import verify_access_token as _verify_access_token
     from crystal.relay_manager import get_relay_manager
 
     _relay_manager = get_relay_manager()
+    _delegation_audiences = _persona_client_ids(personas)
 
     def _resolve_user_id_from_scope(scope: dict) -> Optional[str]:
-        """Resolve the verified ``sub`` from the inbound JWT for relay dispatch.
+        """Resolve the verified ``sub`` from the inbound access token for relay dispatch.
 
         The relay path returns without invoking any persona middleware, so this is the
-        only place the caller identity is verified for relay dispatch — it must verify the
-        signature (never trust an unsigned payload). A forged ``sub`` that fails signature
-        verification yields None, which the middleware renders as 401.
+        only place the caller identity is verified for relay dispatch. `verify_access_token`
+        checks the signature against origin's anchor and then the claim rule in
+        `prism.access_token`: a refresh, email-verification or password-reset token is refused,
+        as is a program's token and a user token addressed to anything but the authority. A
+        delegation is accepted when it was minted for one of this host's personas. Any refusal
+        yields None, which the middleware renders as 401.
         """
         headers = scope.get("headers") or []
         raw_auth = ""
@@ -296,7 +308,7 @@ def build_app(personas: Sequence[Any]) -> FastAPI:
         if not token:
             return None
         try:
-            claims = _verify_jwt(token, expected_issuer_service="origin")
+            claims = _verify_access_token(token, delegation_audiences=_delegation_audiences)
         except Exception:
             return None
         sub = claims.get("sub")
@@ -322,8 +334,10 @@ def build_app(personas: Sequence[Any]) -> FastAPI:
             await websocket.close(code=4401, reason="Missing bearer token")
             return
         token = raw_auth[7:].strip()
+        # The socket makes its caller the relay host for `sub`, so it takes the user's own access
+        # token and no delegation: a persona acting for a user is not that user's desktop.
         try:
-            claims = _verify_jwt(token, expected_issuer_service="origin")
+            claims = _verify_access_token(token, delegation_audiences=())
         except (KeyError, JWTError):
             await websocket.close(code=4401, reason="Invalid bearer token")
             return
@@ -455,7 +469,7 @@ def build_app(personas: Sequence[Any]) -> FastAPI:
 
     @app.middleware("http")
     async def _proxy_upstream(request, call_next):
-        """Forward a declared-upstream host verbatim. The Host header is preserved so the upstream
+        """Forward a declared-upstream host. The Host header is preserved so the upstream
         sees the name the caller used — origin mints tokens whose `iss`/`aud` depend on it, and
         rewriting it to 127.0.0.1 turns a working node into 'Invalid token audience'."""
         addr = _upstream_for_host(request.headers.get("host", ""))
@@ -468,8 +482,33 @@ def build_app(personas: Sequence[Any]) -> FastAPI:
         if request.url.query:
             url += "?" + request.url.query
         # `host` is kept; hop-by-hop headers are not forwarded (they describe this connection).
-        fwd = {k: v for k, v in request.headers.items()
-               if k.lower() not in ("connection", "keep-alive", "transfer-encoding", "upgrade")}
+        #
+        # The client-address headers are this proxy's to write, never the caller's. The upstreams
+        # bind loopback under uvicorn, which trusts `X-Forwarded-For` from 127.0.0.1 and takes the
+        # rightmost untrusted entry as `request.client.host` — origin keys its per-client rate
+        # limits on it. A caller-supplied `X-Forwarded-For`, `X-Real-IP` or `Forwarded` is dropped,
+        # and `X-Forwarded-For` is set to exactly one address: `request.client.host`.
+        #
+        # That value is the real client under the deployment this proxy runs in. This process is
+        # itself served by uvicorn with its defaults (`--proxy-headers` on, `FORWARDED_ALLOW_IPS`
+        # 127.0.0.1): reached directly, `request.client.host` is the socket peer and a sent
+        # `X-Forwarded-For` is ignored; reached through Caddy on loopback, it is taken from the
+        # `X-Forwarded-For` Caddy writes, and Caddy with no `trusted_proxies` replaces any the caller
+        # sent. Trusting a wider `FORWARDED_ALLOW_IPS` here, or a front proxy that passes the
+        # caller's header through, hands the choice of address back to the caller.
+        #
+        # `X-Forwarded-Proto` and `X-Forwarded-Host` follow the same rule: the scheme uvicorn
+        # resolved for this request (from the trusted front proxy, or the socket), and the Host
+        # being forwarded.
+        _theirs = ("connection", "keep-alive", "transfer-encoding", "upgrade",
+                   "x-forwarded-for", "x-real-ip", "forwarded",
+                   "x-forwarded-proto", "x-forwarded-host")
+        fwd = {k: v for k, v in request.headers.items() if k.lower() not in _theirs}
+        if request.client and request.client.host:
+            fwd["x-forwarded-for"] = request.client.host
+        fwd["x-forwarded-proto"] = request.url.scheme
+        if request.headers.get("host"):
+            fwd["x-forwarded-host"] = request.headers["host"]
         try:
             async with httpx.AsyncClient(timeout=60.0) as cx:
                 up = await cx.request(request.method, url, headers=fwd,

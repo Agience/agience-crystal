@@ -2,7 +2,7 @@
   "content_type": "application/vnd.agience.package+json",
   "version": 1,
   "inherits": ["application/json"],
-  "description": "Agience package manifest \u2014 a shareable bundle of artifacts, MCP server dependencies, and wiring. Installed via invoke_artifact(package_id, op=\"install\") which copies contents into a target workspace and registers any missing MCP server dependencies. Published by committing the package artifact to a registry collection.",
+  "description": "Agience package manifest \u2014 a shareable bundle of artifacts, MCP server dependencies, and wiring. Installed via invoke_artifact(package_id, op=\"install\") which copies contents into a target workspace and registers any missing MCP server dependencies. Published by adding the package artifact to a registry collection.",
   "context_schema": {
     "package": {
       "type": "object",
