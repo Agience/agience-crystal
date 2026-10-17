@@ -32,7 +32,8 @@ from crystal.identity import CrystalIdentity, load_trust_anchors, verify_service
 from crystal.mantle import MantleClient
 from crystal.mcp_client import McpCaller
 from crystal.topology import Topology
-from crystal.type_registry import TypeRegistry
+from crystal.type_publish import publish_types
+from crystal.type_registry import BUILTIN_SERVER, TypeRegistry
 
 
 def _bearer(request: Request) -> Optional[str]:
@@ -155,6 +156,8 @@ async def lifespan(app: FastAPI):
         app.state.mantle, app.state.types, app.state.topology,
         mcp=McpCaller(), identity=app.state.identity)
     logger.info("Gateway up. Mantle = %s | awaiting persona registration", config.MANTLE_URI)
+    app.state.type_publishes = set()
+    _publish_server_types(app, BUILTIN_SERVER)
 
     # Event-driven describers: subscribe to Mantle's change-feed as a system
     # consumer so describers also fire on NON-gateway writes. Needs the crystal
@@ -171,6 +174,8 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    for task in list(app.state.type_publishes):
+        task.cancel()
     if app.state.event_driver is not None:
         app.state.event_driver.stop()
     if event_task is not None:
@@ -282,6 +287,25 @@ class RegisterRequest(BaseModel):
     types: List[dict] = []          # type definitions this persona owns
 
 
+def _publish_server_types(app_: FastAPI, server: str) -> None:
+    """Send ``server``'s definitions to Mantle in the background (`crystal/type_publish.py`).
+
+    Mantle's indexer reads each type's `offer` from what is published here. A registration
+    neither waits for it nor fails on it; the task is held so it is not collected mid-flight."""
+    state = app_.state
+    mantle = getattr(state, "mantle", None)
+    if mantle is None:
+        logger.info("type publish for %s skipped: no Mantle client", server)
+        return
+    pending = getattr(state, "type_publishes", None)
+    if pending is None:
+        pending = state.type_publishes = set()
+    task = asyncio.create_task(publish_types(
+        mantle, getattr(state, "identity", None), server, state.types.definitions_from(server)))
+    pending.add(task)
+    task.add_done_callback(pending.discard)
+
+
 @app.post("/register")
 async def register_server(request: Request, body: RegisterRequest):
     """A persona registers itself + the content types it owns. Re-registering
@@ -292,6 +316,7 @@ async def register_server(request: Request, body: RegisterRequest):
     app.state.topology.register(body.slug, body.endpoint, body.client_id)
     n = sum(1 for d in body.types if app.state.types.register(d, server=body.slug))
     logger.info("Registered persona '%s' (%s) with %d type(s)", body.slug, body.endpoint, n)
+    _publish_server_types(app, body.slug)
     return {"registered": body.slug, "endpoint": body.endpoint, "types": n}
 
 

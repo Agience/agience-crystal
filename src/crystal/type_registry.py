@@ -199,6 +199,12 @@ class TypeRegistry:
         td = self.resolve(content_type)
         return td.describer if td else None
 
+    def definitions_from(self, server: str) -> List[dict]:
+        """The definitions ``server`` contributed, as it sent them (the builtins for
+        :data:`BUILTIN_SERVER`)."""
+        source = self._builtin if server == BUILTIN_SERVER else self._cache
+        return [td.raw for _ct, td in sorted(source.items()) if td.server == server]
+
     def remove_server(self, server: str) -> int:
         """Drop all types registered by a server (e.g. on re-register/deregister)."""
         drop = [ct for ct, td in self._cache.items() if td.server == server]

@@ -5,6 +5,12 @@ All notable changes to `agience-crystal` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-17
+
+### Added
+- Crystal publishes each persona's type definitions to Mantle when the persona registers, and its builtin types at startup, through `PUT /type-definitions/{server}` under its service identity. Mantle's indexer reads a type's `offer` from them. A publish runs in the background, is retried while Mantle is unreachable, and never fails a registration.
+- `TypeRegistry.definitions_from(server)` returns the definitions one server contributed, as it sent them.
+
 ## [0.2.0] - 2026-10-09
 
 ### Breaking

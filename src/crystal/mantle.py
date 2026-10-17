@@ -88,6 +88,11 @@ class MantleClient:
         r.raise_for_status()
         return r.json()
 
+    async def put(self, path: str, body: dict, *, token: Optional[str] = None) -> Any:
+        r = await self._client.put(path, json=body, headers=self._headers(token))
+        r.raise_for_status()
+        return r.json()
+
     async def patch(self, path: str, body: dict, *, token: Optional[str] = None) -> Any:
         r = await self._client.patch(path, json=body, headers=self._headers(token))
         r.raise_for_status()
