@@ -2,7 +2,9 @@
   "content_type": "application/vnd.agience.collection+json",
   "version": 1,
   "extensions": [],
-  "inherits": [],
+  "inherits": [
+    "*/*"
+  ],
   "operations": {
     "create": {
       "enabled": true,

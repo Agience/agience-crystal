@@ -72,9 +72,9 @@ and `import crystal` stays free of the measuring stack.
 ## Types
 
 A content type is a directory: `type.json`, plus optional `schema.json`, `behaviors.json`,
-`preview.json` and `handlers/`. [`src/types/`](src/types/) holds the builtin skeletons — `text`,
-`image`, `audio`, `video`, `application` — as repository content read by a test, rather than as
-wheel payload, since nothing loads them from the package at runtime.
+`preview.json` and `handlers/`. [`src/crystal/types/`](src/crystal/types/) holds the builtin skeletons — `text`,
+`image`, `audio`, `video`, `application`, under the root type `*/*` (Artifact) that every other
+type inherits from. They ship in the package; Crystal loads them at startup.
 
 An upstream owns its own types and pushes them to the gateway's `/register` endpoint at startup,
 signed with a service JWT. Types and personas are gateway state.
@@ -85,7 +85,7 @@ signed with a service JWT. Types and personas are gateway state.
 |---|---|
 | [`src/crystal/`](src/crystal/) | dispatch, identity, topology, the MCP client, the registries, the host and the entrypoint |
 | [`src/crystal/ontology/`](src/crystal/ontology/) | the coordinate — `geometry` (the Jiang–Conrath coordinate and the dense basis), `driver` (the ambient read), `lookup`, `coupling`, `freshness`, `transducer`, `seed_lattice` |
-| [`src/types/`](src/types/) | the builtin content-type skeletons |
+| [`src/crystal/types/`](src/crystal/types/) | the builtin content-type skeletons |
 | [`tests/`](tests/) | the suite, including the ratchets holding the import boundaries |
 | [`pyproject.toml`](pyproject.toml) | build, packaging and every dependency; the `service` extra is the one list |
 

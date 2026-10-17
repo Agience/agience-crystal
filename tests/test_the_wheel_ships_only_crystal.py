@@ -1,12 +1,12 @@
-"""The built wheel contains the `crystal` package and nothing else.
+"""The built wheel contains the `crystal` package, its builtin content types, and nothing else.
 
-`src/` holds three directories and only one of them is this distribution. `src/tests/` is a single
-geometry memo test and `src/types/` is the builtin content-type skeletons — JSON with no `.py`, read
-by a test through a repo-relative path and by nothing at runtime. Neither is a package, so
-`packages.find` never returns them, and that is exactly why this was invisible: setuptools wrote
-both into `top_level.txt` anyway and shipped `src/tests/` in the wheel, so `pip install
-agience-crystal` put a top-level `tests` module into site-packages and took that name away from
-everything else installed there.
+`src/tests/` is a single geometry memo test and not a package, so `packages.find` never returns it,
+and that is exactly why this was invisible: setuptools wrote it into `top_level.txt` anyway and
+shipped it in the wheel, so `pip install agience-crystal` put a top-level `tests` module into
+site-packages and took that name away from everything else installed there.
+
+The builtin types (`crystal/types/`) are the opposite case: Crystal reads them at startup, and
+while they lived outside the package no installed Crystal had them.
 
 `include = ["crystal*"]` in `pyproject.toml` is the fix. This builds the real wheel and reads what
 came out, because the defect lived in the distribution and not in any import: the suite was green,
@@ -47,6 +47,17 @@ def test_the_wheel_has_one_top_level_package(wheel: zipfile.ZipFile) -> None:
         "the wheel ships %s. Only `crystal` may be installed by this distribution — anything else "
         "here is a directory under `src/` that is not part of the package." % (sorted(roots),)
     )
+
+
+def test_the_wheel_ships_the_builtin_types(wheel: zipfile.ZipFile) -> None:
+    """2026-10-17: every installed Crystal logged `No builtin types`, so the web app knew no
+    Artifact, Collection or Workspace type and opened a collection as a file."""
+    names = set(wheel.namelist())
+    for t in ("crystal/types/_wildcard/_wildcard/type.json",
+              "crystal/types/application/vnd.agience.collection+json/type.json",
+              "crystal/types/application/vnd.agience.workspace+json/type.json",
+              "crystal/types/text/markdown/type.json"):
+        assert t in names, f"the wheel lacks {t}"
 
 
 def test_top_level_txt_names_only_crystal(wheel: zipfile.ZipFile) -> None:

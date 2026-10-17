@@ -139,10 +139,10 @@ async def lifespan(app: FastAPI):
     app.state.mantle = MantleClient(config.MANTLE_URI, config.MANTLE_API_KEY)
     app.state.types = TypeRegistry()
     # The builtin types: the collection, the workspace, and the base types others name in
-    # `inherits`. They live beside the package in a source checkout (`src/types`, which Facet's
+    # `inherits`. They ship inside the package (`crystal/types`, which Facet's
     # build reads too); `CRYSTAL_TYPES_DIR` points elsewhere for an install that has none there.
     app.state.types.load_builtin(Path(
-        os.getenv("CRYSTAL_TYPES_DIR") or Path(__file__).resolve().parent.parent / "types"))
+        os.getenv("CRYSTAL_TYPES_DIR") or Path(__file__).resolve().parent / "types"))
     app.state.topology = Topology()
     # Crystal service identity (optional) — enables event-driven describers.
     app.state.identity = CrystalIdentity.load(config.KEYS_DIR, config.ORIGIN_URI)

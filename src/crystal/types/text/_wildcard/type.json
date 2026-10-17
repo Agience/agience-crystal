@@ -2,7 +2,9 @@
   "content_type": "text/*",
   "version": 1,
   "extensions": [],
-  "inherits": [],
+  "inherits": [
+    "*/*"
+  ],
   "description": "Defaults for all text/* types",
   "ui": {
     "version": 1,

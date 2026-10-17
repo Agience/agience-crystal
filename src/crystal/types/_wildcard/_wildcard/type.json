@@ -1,0 +1,48 @@
+{
+  "content_type": "*/*",
+  "version": 1,
+  "extensions": [],
+  "inherits": [],
+  "description": "An artifact: content plus its context. The root type; every other type inherits from it, and a type nothing declares is one.",
+  "operations": {
+    "read": {
+      "enabled": true,
+      "requires_grant": "read",
+      "dispatch": { "kind": "artifact_crud" }
+    },
+    "update": {
+      "enabled": true,
+      "requires_grant": "update",
+      "dispatch": { "kind": "artifact_crud" },
+      "emits": [
+        { "event": "artifact.updated", "phase": "after" }
+      ]
+    },
+    "delete": {
+      "enabled": true,
+      "requires_grant": "delete",
+      "dispatch": { "kind": "artifact_crud" },
+      "emits": [
+        { "event": "artifact.deleted", "phase": "after" }
+      ]
+    }
+  },
+  "ui": {
+    "label": "Artifact",
+    "icon": "package",
+    "color": "#6b7280",
+    "badge_class": "",
+    "tile_class": "",
+    "modes": [
+      "floating"
+    ],
+    "states": [
+      "view"
+    ],
+    "default_mode": "floating",
+    "default_state": "view",
+    "is_container": false,
+    "creatable": false,
+    "viewer": null
+  }
+}

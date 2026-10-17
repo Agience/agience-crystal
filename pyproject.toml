@@ -111,10 +111,15 @@ dev = ["pytest>=8", "pytest-asyncio>=0.24", "pytest-timeout>=2.2", "build>=1.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
-# `include` is load-bearing, not tidiness. `src/` also holds `tests/` (one geometry memo test) and
-# `types/` (the builtin content-type skeletons, JSON with no `.py`). Neither is a package, so
-# `find` does not return them — but without this filter setuptools still wrote both into
-# `top_level.txt` and shipped `src/tests/` in the wheel, so `pip install agience-crystal` installed
-# a top-level `tests` module into site-packages and squatted that name for everything else in the
-# environment. `tests/test_the_wheel_ships_only_crystal.py` holds it.
+# `include` is load-bearing, not tidiness. `src/` also holds `tests/` (one geometry memo test),
+# which is not a package — but without this filter setuptools still wrote it into `top_level.txt`
+# and shipped it in the wheel, so `pip install agience-crystal` installed a top-level `tests` module
+# into site-packages and squatted that name for everything else in the environment.
+# `tests/test_the_wheel_ships_only_crystal.py` holds it.
 include = ["crystal*"]
+
+[tool.setuptools.package-data]
+# The builtin content types, read at startup (`crystal.main`). They lived beside the package in
+# `src/types` and were never in the wheel, so every installed Crystal ran without them: no Artifact,
+# Collection or Workspace type, and the web app opened a collection as a file (2026-10-17).
+crystal = ["types/*/*/*.json"]

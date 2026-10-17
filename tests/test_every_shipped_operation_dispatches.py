@@ -2,7 +2,7 @@
 
 The other dispatcher tests build their registries inline, and every one of those fixtures
 supplies a `dispatch.target`. No shipped descriptor does: all twelve under
-`src/types/application/` declare `{"kind": "artifact_crud"}` bare and let the operation name
+`src/crystal/types/application/` declare `{"kind": "artifact_crud"}` bare and let the operation name
 carry the verb. So the suite was green against a shape the repo's own data never uses, and all
 28 real artifact_crud operations answered `400 artifact_crud target 'None'` — measured
 2026-08-25, 0 of 28 dispatching.
@@ -55,7 +55,7 @@ class FakeMantle:
         return {"hits": []}
 
 
-TYPES_DIR = pathlib.Path(__file__).resolve().parents[1] / "src" / "types" / "application"
+TYPES_DIR = pathlib.Path(__file__).resolve().parents[1] / "src" / "crystal" / "types" / "application"
 
 #: The verbs `Dispatcher._artifact_crud` can route. An operation name outside this set must
 #: declare an explicit target, and this list is what says so.

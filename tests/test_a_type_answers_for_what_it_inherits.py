@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 from crystal.main import app
 from crystal.type_registry import BUILTIN_SERVER, TypeRegistry
 
-TYPES = Path(__file__).resolve().parent.parent / "src" / "types"
+TYPES = Path(__file__).resolve().parent.parent / "src" / "crystal" / "types"
 WORKSPACE = "application/vnd.agience.workspace+json"
 COLLECTION = "application/vnd.agience.collection+json"
 #: Ophan's market-series type, as chorus ships it, cut to what registration reads: no operations, the
@@ -95,3 +95,27 @@ def test_resolve_reports_inherited_operations():
     app.state.types = _builtins()
     body = TestClient(app).get(f"/resolve/{WORKSPACE}").json()
     assert {"create", "read", "update", "delete"} <= set(body["operations"]), body
+
+
+# ── everything inherits from the root, `*/*` (Artifact) ─────────────────────────────────────────
+
+def test_every_builtin_type_reaches_the_root():
+    registry = _builtins()
+    for ct in registry.known():
+        lineage = [td.content_type for td in registry._lineage(ct)]
+        assert lineage[-1] == "*/*", f"{ct} does not inherit from the root: {lineage}"
+
+
+def test_a_workspace_is_a_collection_is_an_artifact():
+    lineage = [td.content_type for td in _builtins()._lineage(WORKSPACE)]
+    assert lineage == [WORKSPACE, COLLECTION, "*/*"]
+
+
+def test_a_type_nothing_declares_is_an_artifact_and_answers_for_it():
+    """2026-10-17, staging: a website lead (`application/vnd.agience.lead+json`) had no type."""
+    registry = _builtins()
+    lead = [td.content_type for td in registry._lineage("application/vnd.agience.lead+json")]
+    assert lead == ["*/*"], "a data type nothing declares is an artifact, never a File"
+    assert {"read", "update", "delete"} <= set(registry.operations_of("application/vnd.agience.lead+json"))
+    assert [td.content_type for td in registry._lineage("application/zip")] == ["application/*", "*/*"]
+    assert [td.content_type for td in registry._lineage("text/x-rst")] == ["text/*", "*/*"]

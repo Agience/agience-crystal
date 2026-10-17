@@ -4,7 +4,9 @@
   "extensions": [
     ".json"
   ],
-  "inherits": [],
+  "inherits": [
+    "*/*"
+  ],
   "description": "JSON document",
   "ui": {
     "version": 1,

@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 
 #: The `server` a builtin type is recorded under.
 BUILTIN_SERVER = "crystal"
+#: The root type: an artifact. Every type inherits from it (`types/_wildcard/_wildcard`).
+ROOT_TYPE = "*/*"
 
 
 def normalize_ct(content_type: str) -> str:
@@ -147,7 +149,9 @@ class TypeRegistry:
                 continue
             if not isinstance(definition, dict):
                 continue
-            definition.setdefault("content_type", f"{top}/{'*' if sub == '_wildcard' else sub}")
+            # `_wildcard` is `*` at either level: `_wildcard/_wildcard` is the root `*/*`.
+            definition.setdefault("content_type", f"{'*' if top == '_wildcard' else top}/"
+                                                  f"{'*' if sub == '_wildcard' else sub}")
             td = parse_type_def(definition, server=BUILTIN_SERVER)
             if td is not None:
                 self._builtin[td.content_type] = td
@@ -160,7 +164,13 @@ class TypeRegistry:
         return self._cache.get(ct) or self._builtin.get(ct)
 
     def _lineage(self, content_type: str) -> List[TypeDefinition]:
-        """The type, then each type it inherits from, depth first in declared order, each once."""
+        """The type, then each type it inherits from, depth first in declared order, each once,
+        ending at the root `*/*` (Artifact) that every type inherits from.
+
+        A type nothing declares is still an artifact: its lineage is its category's wildcard
+        (`text/*`), then the root. `application/*` (File) is a file format's category only, so an
+        Agience or `+json` data type nothing declares goes straight to the root, as the web app
+        resolves it (`registry/content-types.ts`)."""
         out: List[TypeDefinition] = []
         seen = set()
 
@@ -179,6 +189,14 @@ class TypeRegistry:
                     walk(parent, depth + 1)
 
         walk(content_type, 0)
+        ct = normalize_ct(content_type)
+        if not out and "/" in ct:
+            major = ct.split("/", 1)[0]
+            data = major == "application" and (ct.startswith("application/vnd.agience.")
+                                               or ct.endswith("+json"))
+            if not data:
+                walk(f"{major}/*", 0)
+        walk(ROOT_TYPE, 0)
         return out
 
     def operations_of(self, content_type: str) -> Dict[str, OperationSpec]:

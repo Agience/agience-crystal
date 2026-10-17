@@ -8,7 +8,9 @@
     ".mkv",
     ".avi"
   ],
-  "inherits": [],
+  "inherits": [
+    "*/*"
+  ],
   "description": "Defaults for all video/* types",
   "ui": {
     "label": "Video",

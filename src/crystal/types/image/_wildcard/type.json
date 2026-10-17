@@ -10,7 +10,9 @@
     ".webp",
     ".avif"
   ],
-  "inherits": [],
+  "inherits": [
+    "*/*"
+  ],
   "description": "Defaults for all image/* types",
   "ui": {
     "label": "Image",

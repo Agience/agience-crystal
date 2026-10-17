@@ -8,7 +8,9 @@
     ".flac",
     ".aac"
   ],
-  "inherits": [],
+  "inherits": [
+    "*/*"
+  ],
   "description": "Defaults for all audio/* types",
   "ui": {
     "label": "Audio",

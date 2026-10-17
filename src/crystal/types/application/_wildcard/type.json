@@ -2,7 +2,9 @@
   "content_type": "application/*",
   "version": 1,
   "extensions": [],
-  "inherits": [],
+  "inherits": [
+    "*/*"
+  ],
   "description": "Fallback for all unrecognised application/* types",
   "ui": {
     "label": "File",

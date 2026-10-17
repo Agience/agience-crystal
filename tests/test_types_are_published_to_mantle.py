@@ -17,7 +17,7 @@ from crystal.topology import Topology
 from crystal.type_publish import publish_types
 from crystal.type_registry import BUILTIN_SERVER, TypeRegistry
 
-TYPES = Path(__file__).resolve().parent.parent / "src" / "types"
+TYPES = Path(__file__).resolve().parent.parent / "src" / "crystal" / "types"
 LEXICON = {"content_type": "text/x-wordnet", "offer": {"tags": ["lemmas"]}}
 
 
