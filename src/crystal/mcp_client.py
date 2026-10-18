@@ -1,8 +1,9 @@
-"""Minimal MCP (streamable-http) tool caller for `mcp_tool` dispatch.
+"""Minimal MCP (streamable-http) client for persona calls.
 
-Does the small handshake personas expect — initialize → notifications/initialized →
-tools/call — forwarding the caller's bearer token so the persona enforces its own
-auth. Parses the JSON-RPC result out of a JSON or SSE response.
+Does the small handshake personas expect — initialize → notifications/initialized → the request
+(`tools/call` for `mcp_tool` dispatch; `tools/list`, `resources/list`, `resources/read` for the
+`/personas` surface) — forwarding the caller's bearer token so the persona enforces its own auth.
+Parses the JSON-RPC result out of a JSON or SSE response.
 """
 from __future__ import annotations
 
@@ -43,7 +44,7 @@ def _parse_result(resp: httpx.Response) -> Any:
         return {"raw": resp.text}
     if "error" in payload:
         err = payload["error"]
-        raise HTTPException(status_code=502, detail=f"MCP tool error: {err}")
+        raise HTTPException(status_code=502, detail=f"MCP error: {err}")
     return payload.get("result", payload)
 
 
@@ -53,6 +54,11 @@ class McpCaller:
 
     async def call_tool(self, endpoint: str, tool: str, arguments: dict,
                         *, token: Optional[str] = None) -> Any:
+        return await self.request(endpoint, "tools/call",
+                                  {"name": tool, "arguments": arguments or {}}, token=token)
+
+    async def request(self, endpoint: str, method: str, params: dict,
+                      *, token: Optional[str] = None) -> Any:
         headers = {"Content-Type": "application/json",
                    "Accept": "application/json, text/event-stream"}
         if token:
@@ -68,7 +74,6 @@ class McpCaller:
                 h["mcp-session-id"] = session
             await c.post(endpoint, headers=h,
                          json={"jsonrpc": "2.0", "method": "notifications/initialized"})
-            resp = await c.post(endpoint, headers=h, json=_rpc(
-                2, "tools/call", {"name": tool, "arguments": arguments or {}}))
+            resp = await c.post(endpoint, headers=h, json=_rpc(2, method, params or {}))
             resp.raise_for_status()
             return _parse_result(resp)

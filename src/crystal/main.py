@@ -31,6 +31,7 @@ from crystal.events import EventDescriberDriver, mantle_ws_url
 from crystal.identity import CrystalIdentity, load_trust_anchors, verify_service_token
 from crystal.mantle import MantleClient
 from crystal.mcp_client import McpCaller
+from crystal.personas import PersonaGateway
 from crystal.topology import Topology
 from crystal.type_publish import publish_types
 from crystal.type_registry import BUILTIN_SERVER, TypeRegistry
@@ -155,6 +156,7 @@ async def lifespan(app: FastAPI):
     app.state.dispatcher = Dispatcher(
         app.state.mantle, app.state.types, app.state.topology,
         mcp=McpCaller(), identity=app.state.identity)
+    app.state.personas = PersonaGateway(app.state.topology, app.state.dispatcher.mcp)
     logger.info("Gateway up. Mantle = %s | awaiting persona registration", config.MANTLE_URI)
     app.state.type_publishes = set()
     _publish_server_types(app, BUILTIN_SERVER)
@@ -414,6 +416,31 @@ async def run_operation(artifact_id: str, op_name: str, request: Request,
     bearer token so Mantle/personas enforce access."""
     return await app.state.dispatcher.dispatch(
         artifact_id, op_name, body, token=_require_bearer(request))
+
+
+@app.get("/personas")
+async def list_personas(request: Request):
+    """Every registered persona with its tools and resources (`personas.PersonaGateway`)."""
+    return {"items": await app.state.personas.list(_require_bearer(request))}
+
+
+@app.post("/personas/{slug}/resources/read")
+async def read_persona_resource(slug: str, request: Request, body: dict = Body(default_factory=dict)):
+    """Read one of the persona's resources, e.g. the `ui://` view a content type names."""
+    uri = (body or {}).get("uri")
+    if not uri:
+        raise HTTPException(status_code=400, detail="body.uri is required")
+    return await app.state.personas.read_resource(slug, uri, _require_bearer(request))
+
+
+@app.post("/personas/{slug}/tools/call")
+async def call_persona_tool(slug: str, request: Request, body: dict = Body(default_factory=dict)):
+    """Call one of the persona's tools: what a view the persona served calls back."""
+    name = (body or {}).get("name")
+    if not name:
+        raise HTTPException(status_code=400, detail="body.name is required")
+    return await app.state.personas.call_tool(slug, name, (body or {}).get("arguments") or {},
+                                              _require_bearer(request))
 
 
 # `POST /embed` is not a route: an observer computes the coordinate where it is needed rather than
