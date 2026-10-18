@@ -179,13 +179,15 @@ def _create_registry():
     return reg
 
 
-def test_create_native_routes_to_container_primitive():
+def test_create_native_routes_to_the_artifacts_primitive():
+    """A top-level container is created by Mantle's `POST /artifacts`; `/artifacts/containers` is
+    gone (2026-10-18: every `/create` of a collection or workspace answered 405)."""
     m = FakeMantle(None)
     d = Dispatcher(m, _create_registry(), Topology())
     res = asyncio.run(d.create("app/container", {"name": "Proj"}, token="tok"))
     assert res == {"posted": True}
     post = next(c for c in m.calls if c[0] == "post")
-    assert post[1] == "/artifacts/containers"
+    assert post[1] == "/artifacts"
     assert post[2]["content_type"] == "app/container"   # injected from the route
     assert post[2]["name"] == "Proj"
     assert post[3] == "tok"

@@ -14,6 +14,7 @@ All notable changes to `agience-crystal` are recorded here. The format follows
 - The root type `*/*` (Artifact). Every type inherits from it: Collection, Workspace (through Collection), File (`application/*`), JSON, Text, Image, Audio, Video and the type definition type. A type nothing declares resolves to its category's wildcard and then to the root (an Agience or `+json` data type straight to the root, never to File), so it answers for an artifact's read, update and delete.
 
 ### Fixed
+- `/create` of a collection or workspace (a type whose `create` is native) posts to Mantle's `POST /artifacts`. It posted to `/artifacts/containers`, which Mantle no longer serves, and answered 405.
 - The builtin types ship in the wheel (`crystal/types`, package data). They lived in `src/types` outside the package, so no installed Crystal ever loaded them: no Collection or Workspace type reached the web app, which opened a collection as a file.
 
 ## [0.2.0] - 2026-10-09

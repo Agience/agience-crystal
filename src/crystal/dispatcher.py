@@ -73,10 +73,10 @@ class Dispatcher:
         # No declared `create` op → default to a plain child insert. Mantle
         # enforces access; the body must carry a container_id.
         kind = op.kind if op else "artifact_crud"
-        if kind == "native":
-            # The only native create primitive is top-level container creation.
-            return await self.mantle.post("/artifacts/containers", payload, token=token)
-        if kind == "artifact_crud":
+        if kind in ("native", "artifact_crud"):
+            # `native` is top-level container creation, which Mantle's `POST /artifacts` serves (no
+            # `container_id`). 2026-10-18: it posted to `/artifacts/containers`, which Mantle no
+            # longer serves, so every collection or workspace created through `/create` was a 405.
             return await self.mantle.post("/artifacts", payload, token=token)
         if kind == "mcp_tool":
             return await self._mcp_tool(op, None, payload, token)
