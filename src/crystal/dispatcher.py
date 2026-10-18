@@ -35,6 +35,7 @@ class Dispatcher:
         self.topology = topology
         self.mcp = mcp  # McpCaller (mcp_tool dispatch); injected for testability
         self.identity = identity  # CrystalIdentity — mints delegations for event-driven describers
+        self.servers = None  # PersonaGateway, set by the app: reaches servers that are not personas
         self._described: dict = {}  # artifact_id -> ts; dedups inline vs event + breaks loops
         self._describe_dedup_ttl = describe_dedup_ttl
 
@@ -287,8 +288,18 @@ class Dispatcher:
                     detail=f"mcp_tool arguments: '{spec}' resolved to {type(resolved).__name__}, want an object")
             return resolved
         if isinstance(spec, dict):
-            return {k: cls._resolve_ref(v, ns, what=f"mcp_tool argument '{k}'")
-                    for k, v in spec.items()}
+            out = {}
+            for k, v in spec.items():
+                # `$.path?` is optional: left out when the path is absent, so a request field the
+                # caller may omit (a workspace hint, extra parameters) does not have to be sent.
+                if isinstance(v, str) and v.startswith("$.") and v.endswith("?"):
+                    try:
+                        out[k] = cls._resolve_ref(v[:-1], ns, what=f"mcp_tool argument '{k}'")
+                    except HTTPException:
+                        pass
+                    continue
+                out[k] = cls._resolve_ref(v, ns, what=f"mcp_tool argument '{k}'")
+            return out
         raise HTTPException(
             status_code=500,
             detail=f"mcp_tool arguments must be an object or a path, got {type(spec).__name__}")
@@ -311,6 +322,9 @@ class Dispatcher:
                 detail=f"Bad mcp_tool dispatch (server={slug!r}, tool={tool!r}) — "
                        f"declare `target` as 'persona.tool', or `server_ref` + `tool_ref`")
         rec = self.topology.resolve(slug)
+        if rec is None and self.servers is not None:
+            # Not a persona: a server a person added, by its artifact id (`personas.PersonaGateway`).
+            return await self.servers.call_tool(slug, tool, args, token)
         if rec is None:
             raise HTTPException(status_code=502, detail=f"Persona '{slug}' is not registered")
         if self.mcp is None:

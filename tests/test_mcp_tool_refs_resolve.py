@@ -113,6 +113,17 @@ def test_arguments_may_be_a_single_path_to_an_object():
     assert args == {"a": 1}
 
 
+def test_an_optional_ref_is_left_out_when_absent_and_applied_when_present():
+    """`$.path?`: the transform type passes the workspace and params a caller may omit
+    (2026-10-18: every transform invoke failed, because none passed the card's own id)."""
+    spec = {"kind": "mcp_tool", "server_ref": "lumen", "tool_ref": "execute_transform",
+            "arguments": {"transform_id": "$.root_id", "workspace_id": "$.body.workspace_id?"}}
+    _, _, without = _dispatch(spec, body={})
+    assert without == {"transform_id": "iris"}
+    _, _, with_ws = _dispatch(spec, body={"workspace_id": "w1"})
+    assert with_ws == {"transform_id": "iris", "workspace_id": "w1"}
+
+
 def test_absent_arguments_forwards_the_body_unchanged():
     _, _, args = _dispatch({"kind": "mcp_tool", "server_ref": "lumen", "tool_ref": "synthesize"},
                            body={"x": 1})

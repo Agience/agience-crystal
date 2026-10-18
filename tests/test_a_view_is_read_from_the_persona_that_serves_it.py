@@ -105,3 +105,47 @@ def test_the_listing_names_every_persona_and_marks_one_that_is_down():
     assert by["seraph"]["status"] == "ok"
     assert by["seraph"]["tools"][0]["name"] == "create_api_key"
     assert by["seraph"]["resources"][0]["uri"] == VIEW
+
+
+SERVER = "31ed37cd-5a51-451d-bd8e-82713220db08"
+
+
+class RelayingMcp(FakeMcp):
+    """Iris answering `call_mcp_server` as it does: a JSON text block, `error` + `status` on refusal."""
+
+    def __init__(self, answer):
+        super().__init__()
+        self.answer = answer
+
+    async def request(self, endpoint, method, params, *, token=None):
+        self.calls.append((endpoint, method, params, token))
+        import json as _json
+        return {"content": [{"type": "text", "text": _json.dumps(self.answer)}]}
+
+
+def test_a_server_a_person_added_is_reached_through_iris_by_its_id():
+    """2026-10-18: invoking a person's MCP server answered "Persona '<id>' is not registered"."""
+    mcp = RelayingMcp({"result": {"content": [{"type": "text", "text": "pong"}]}})
+    r = _client(mcp, "iris").post(f"/personas/{SERVER}/tools/call", headers=AUTH,
+                                  json={"name": "ping", "arguments": {"x": 1}})
+    assert r.status_code == 200 and r.json()["content"][0]["text"] == "pong"
+    endpoint, method, params, token = mcp.calls[0]
+    assert endpoint.endswith("/iris/mcp") and method == "tools/call" and token == "user-token"
+    assert params == {"name": "call_mcp_server", "arguments": {
+        "server_artifact_id": SERVER, "method": "tools/call", "params": {"name": "ping", "arguments": {"x": 1}}}}
+
+
+def test_a_refused_or_unreachable_server_keeps_its_meaning():
+    refused = RelayingMcp({"error": "private address", "status": 403})
+    assert _client(refused, "iris").post(f"/personas/{SERVER}/tools/call", headers=AUTH,
+                                         json={"name": "t"}).status_code == 403
+    down = RelayingMcp({"error": "connection refused", "status": 503})
+    assert _client(down, "iris").post(f"/personas/{SERVER}/tools/call", headers=AUTH,
+                                      json={"name": "t"}).status_code == 503
+
+
+def test_a_name_that_is_not_registered_is_not_relayed():
+    mcp = RelayingMcp({"result": {}})
+    assert _client(mcp, "iris").post("/personas/nobody/tools/call", headers=AUTH,
+                                     json={"name": "t"}).status_code == 503
+    assert mcp.calls == []

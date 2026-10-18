@@ -157,6 +157,7 @@ async def lifespan(app: FastAPI):
         app.state.mantle, app.state.types, app.state.topology,
         mcp=McpCaller(), identity=app.state.identity)
     app.state.personas = PersonaGateway(app.state.topology, app.state.dispatcher.mcp)
+    app.state.dispatcher.servers = app.state.personas
     logger.info("Gateway up. Mantle = %s | awaiting persona registration", config.MANTLE_URI)
     app.state.type_publishes = set()
     _publish_server_types(app, BUILTIN_SERVER)

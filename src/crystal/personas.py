@@ -11,17 +11,28 @@ Mantle primitive that was removed, and every `vnd.agience.*` viewer said its ser
 
 The caller's bearer token is forwarded, so the persona enforces its own access, as for `mcp_tool`
 dispatch. A persona that is not registered, or does not answer, is reported as not running (503).
+
+A server a person added is a `vnd.agience.mcp-server+json` artifact, named by its id. It is reached
+through Iris (`call_mcp_server`), the networking persona: Iris reads the card as the caller, reaches
+only an HTTP endpoint through the platform's egress guard, and never sends the caller's credential to
+the server. 2026-10-18: invoking one answered "Persona '<id>' is not registered".
 """
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import re
 from typing import Any, Dict, List, Optional
 
 import httpx
 from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
+
+_UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
+#: The persona that reaches servers outside the platform.
+RELAY = "iris"
 
 
 class PersonaGateway:
@@ -37,6 +48,8 @@ class PersonaGateway:
         return rec.endpoint
 
     async def _call(self, slug: str, method: str, params: dict, token: Optional[str]) -> Any:
+        if self.topology.resolve(slug) is None and _UUID.match(slug or ""):
+            return await self._relay(slug, method, params, token)
         endpoint = self._endpoint(slug)
         try:
             return await self.mcp.request(endpoint, method, params, token=token)
@@ -48,6 +61,24 @@ class PersonaGateway:
         except httpx.TransportError as exc:
             logger.warning("persona %s unreachable for %s: %s", slug, method, exc)
             raise HTTPException(status_code=503, detail=f"The {slug} server is not running")
+
+    async def _relay(self, server_id: str, method: str, params: dict, token: Optional[str]) -> Any:
+        """One request to a person's MCP server, through Iris."""
+        answer = await self._call(RELAY, "tools/call", {
+            "name": "call_mcp_server",
+            "arguments": {"server_artifact_id": server_id, "method": method, "params": params or {}},
+        }, token)
+        text = ((answer or {}).get("content") or [{}])[0].get("text") or "{}"
+        try:
+            payload = json.loads(text)
+        except ValueError:
+            raise HTTPException(status_code=502, detail=f"{RELAY} answered: {text[:200]}")
+        if "error" in payload:
+            status = int(payload.get("status") or 502)
+            if status == 503:
+                raise HTTPException(status_code=503, detail=f"The server is not reachable: {payload['error']}")
+            raise HTTPException(status_code=status, detail=payload["error"])
+        return payload.get("result") or {}
 
     async def read_resource(self, slug: str, uri: str, token: Optional[str]) -> Dict[str, Any]:
         result = await self._call(slug, "resources/read", {"uri": uri}, token)
