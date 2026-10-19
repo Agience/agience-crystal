@@ -4,6 +4,14 @@
   "extensions": [],
   "inherits": [],
   "description": "An artifact: content plus its context. The root type; every other type inherits from it, and a type nothing declares is one.",
+  "context_schema": {
+    "title": {
+      "type": "string",
+      "mutable": true,
+      "part": "content",
+      "description": "The artifact's title. Part of its content, so every type inherits it: sealed under the content's key at rest and restored for a reader who may read the content. The store and the change feed carry it only as ciphertext."
+    }
+  },
   "operations": {
     "read": {
       "enabled": true,
