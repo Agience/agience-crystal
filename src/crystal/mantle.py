@@ -67,6 +67,16 @@ class MantleClient:
         r.raise_for_status()
         return bool(r.json().get("allowed"))
 
+    async def links(self, artifact_id: str, name: str, *, token: Optional[str] = None) -> list:
+        """The artifact's typed links named `name` (with its `name.` sub-names), each shown only
+        when the caller may read what it links. A link confers nothing."""
+        r = await self._client.get(f"/artifacts/{artifact_id}/children",
+                                   params={"links": name, "limit": 100},
+                                   headers=self._headers(token))
+        r.raise_for_status()
+        page = r.json()
+        return page.get("items", []) if isinstance(page, dict) else list(page or [])
+
     async def search(self, body: dict, *, token: Optional[str] = None) -> dict:
         """Mantle's retrieval endpoint, reached by the dispatcher's `search` verb.
 

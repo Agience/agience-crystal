@@ -27,6 +27,13 @@ from fastapi import HTTPException
 logger = logging.getLogger(__name__)
 
 
+class _Link(tuple):
+    """An argument an operator declares as `@relationship.<name>[?]`: (name, optional). Its own
+    type, so a caller's parameter that happens to read `@relationship.x` stays the caller's data."""
+    def __new__(cls, name: str, optional: bool):
+        return super().__new__(cls, (name, optional))
+
+
 class Dispatcher:
     def __init__(self, mantle, types, topology, mcp=None, identity=None,
                  describe_dedup_ttl: float = 15.0) -> None:
@@ -286,23 +293,64 @@ class Dispatcher:
                 raise HTTPException(
                     status_code=500,
                     detail=f"mcp_tool arguments: '{spec}' resolved to {type(resolved).__name__}, want an object")
+            # A map the artifact declares (an operator's `context.operator.arguments`) is itself a
+            # mapping, resolved like an inline one. A map from the request is the caller's data,
+            # forwarded as it is.
+            if spec.startswith(("$.context.", "$.content")):
+                return cls._resolve_mapping(resolved, ns)
             return resolved
         if isinstance(spec, dict):
-            out = {}
-            for k, v in spec.items():
-                # `$.path?` is optional: left out when the path is absent, so a request field the
-                # caller may omit (a workspace hint, extra parameters) does not have to be sent.
-                if isinstance(v, str) and v.startswith("$.") and v.endswith("?"):
-                    try:
-                        out[k] = cls._resolve_ref(v[:-1], ns, what=f"mcp_tool argument '{k}'")
-                    except HTTPException:
-                        pass
-                    continue
-                out[k] = cls._resolve_ref(v, ns, what=f"mcp_tool argument '{k}'")
-            return out
+            return cls._resolve_mapping(spec, ns)
         raise HTTPException(
             status_code=500,
             detail=f"mcp_tool arguments must be an object or a path, got {type(spec).__name__}")
+
+    @classmethod
+    def _resolve_mapping(cls, spec, ns):
+        """name -> literal, `$.path`, `$.path?` (left out when absent) or `@relationship.<name>[?]`,
+        which stays a marker here and is resolved from the artifact's links (`_resolve_links`)."""
+        out = {}
+        for k, v in spec.items():
+            # `$.path?` is optional: left out when the path is absent, so a request field the
+            # caller may omit (a workspace hint, extra parameters) does not have to be sent.
+            if isinstance(v, str) and v.startswith("$.") and v.endswith("?"):
+                try:
+                    out[k] = cls._resolve_ref(v[:-1], ns, what=f"mcp_tool argument '{k}'")
+                except HTTPException:
+                    pass
+                continue
+            if isinstance(v, str) and v.startswith(cls._LINK):
+                out[k] = _Link(v[len(cls._LINK):].rstrip("?"), v.endswith("?"))
+                continue
+            out[k] = cls._resolve_ref(v, ns, what=f"mcp_tool argument '{k}'")
+        return out
+
+    _LINK = "@relationship."
+
+    async def _resolve_links(self, args, artifact, token):
+        """Each `@relationship.<name>` argument becomes the id of the artifact this one links by
+        that name — read with the caller's token, so a link the caller may not read is not there.
+        `@relationship.<name>?` is left out when there is no such link; without the `?` that is a
+        422 naming the link. Two links of one name are a 422 too: which one is meant is not said."""
+        wanted = {k: v for k, v in args.items() if isinstance(v, _Link)}
+        if not wanted:
+            return args
+        source = (artifact or {}).get("root_id") or (artifact or {}).get("id")
+        out = dict(args)
+        for k, (name, optional) in wanted.items():
+            found = [i for i in (await self.mantle.links(source, name, token=token) if source else [])
+                     if i.get("relationship") == name]
+            if len(found) > 1:
+                raise HTTPException(status_code=422,
+                                    detail=f"argument '{k}': {len(found)} links named '{name}'; one is meant")
+            if not found:
+                if optional:
+                    out.pop(k)
+                    continue
+                raise HTTPException(status_code=422,
+                                    detail=f"argument '{k}': no link named '{name}' that you may read")
+            out[k] = found[0].get("root_id") or found[0].get("id")
+        return out
 
     async def _mcp_tool(self, op, artifact, body, token):
         # Two declared forms. `server_ref`/`tool_ref` is what every shipped descriptor uses and
@@ -312,7 +360,7 @@ class Dispatcher:
             ns = self._ref_namespace(artifact, body)
             slug = self._resolve_ref(op.server_ref, ns, what="mcp_tool server_ref")
             tool = self._resolve_ref(op.tool_ref, ns, what="mcp_tool tool_ref")
-            args = self._resolve_arguments(op, ns, body)
+            args = await self._resolve_links(self._resolve_arguments(op, ns, body), artifact, token)
         else:
             slug, _, tool = (op.target or "").partition(".")
             args = body or {}

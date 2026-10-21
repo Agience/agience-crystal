@@ -19,6 +19,7 @@ All notable changes to `agience-crystal` are recorded here. The format follows
 ### Fixed
 - `/create` of a collection or workspace (a type whose `create` is native) posts to Mantle's `POST /artifacts`. It posted to `/artifacts/containers`, which Mantle no longer serves, and answered 405.
 - The builtin types ship in the wheel (`crystal/types`, package data). They lived in `src/types` outside the package, so no installed Crystal ever loaded them: no Collection or Workspace type reached the web app, which opened a collection as a file.
+- An operator's argument map is resolved: `$.body.params.<name>` from the invoke request (`?` when it may be absent) and `@relationship.<name>` from the operator's own links, read as the caller (422 naming the link when it is absent, or when two links share the name). The map declared at `$.context.operator.arguments` was forwarded as it stood, so every operator sent its tool the literal strings `"$.body.params.to"` and `"@relationship.authorizer"`. A map taken from the request stays the caller's data.
 
 ## [0.2.0] - 2026-10-09
 

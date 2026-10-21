@@ -112,8 +112,10 @@ def _artifact_url_paths(tree: ast.AST):
         base = ast.unparse(node.args[0])
         if not any(b in base for b in _CRYSTAL_BASES):
             continue
-        suffix = [a.value for a in node.args[2:]
-                  if isinstance(a, ast.Constant) and isinstance(a.value, str)]
+        # A segment computed at the call (`action.get("operation") or "invoke"`) is a parameter, as
+        # an f-string's `{}` is in shape 1; dropping it read `/op/{name}` as `/op`, a route nothing serves.
+        suffix = [a.value if isinstance(a, ast.Constant) and isinstance(a.value, str) else "{}"
+                  for a in node.args[2:]]
         yield "/".join(["/artifacts/{id}"] + suffix), node.lineno
 
 
