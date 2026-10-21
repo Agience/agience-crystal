@@ -15,6 +15,7 @@ All notable changes to `agience-crystal` are recorded here. The format follows
 - Crystal publishes each persona's type definitions to Mantle when the persona registers, and its builtin types at startup, through `PUT /type-definitions/{server}` under its service identity. Mantle's indexer reads a type's `offer` from them. A publish runs in the background, is retried while Mantle is unreachable, and never fails a registration.
 - `TypeRegistry.definitions_from(server)` returns the definitions one server contributed, as it sent them.
 - The root type `*/*` (Artifact). Every type inherits from it: Collection, Workspace (through Collection), File (`application/*`), JSON, Text, Image, Audio, Video and the type definition type. A type nothing declares resolves to its category's wildcard and then to the root (an Agience or `+json` data type straight to the root, never to File), so it answers for an artifact's read, update and delete.
+- A persona tool the platform offers as an operator is reached only by a caller who may invoke that operator: on `POST /personas/{slug}/tools/call`, and through any operator card naming it, so an account withheld an operator cannot reach its tool directly or through a card of its own. A tool no platform operator runs is unaffected; the answer is kept 30 seconds per caller, and the gate fails closed.
 
 ### Fixed
 - `/create` of a collection or workspace (a type whose `create` is native) posts to Mantle's `POST /artifacts`. It posted to `/artifacts/containers`, which Mantle no longer serves, and answered 405.

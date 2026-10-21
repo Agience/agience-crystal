@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from crystal.main import app
 from crystal.personas import PersonaGateway
 from crystal.topology import Topology
+from crystal.operator_gate import OperatorGate
 
 AUTH = {"Authorization": "Bearer user-token"}
 VIEW = "ui://seraph/vnd.agience.key.html"
@@ -47,7 +48,13 @@ def _client(mcp, *slugs):
     for s in slugs:
         topo.register(s, f"http://127.0.0.1:8085/{s}/mcp")
     app.state.personas = PersonaGateway(topo, mcp)
+    app.state.operator_gate = OperatorGate(_NoOperators())   # no tool here is a platform operator's
     return TestClient(app)
+
+
+class _NoOperators:
+    async def platform_operators(self, *, token=None):
+        return []
 
 
 def test_the_view_is_read_from_the_persona_it_names_with_the_callers_token():
@@ -149,3 +156,17 @@ def test_a_name_that_is_not_registered_is_not_relayed():
     assert _client(mcp, "iris").post("/personas/nobody/tools/call", headers=AUTH,
                                      json={"name": "t"}).status_code == 503
     assert mcp.calls == []
+
+
+def test_a_platform_operators_tool_is_refused_on_the_route_without_its_grant():
+    """2026-10-21: a withheld operator's tool was one direct call away."""
+    class _Withheld:
+        async def platform_operators(self, *, token=None):
+            return [{"slug": "op-reconcile-accounts", "server": "lumen", "tool": "reconcile", "may_invoke": False}]
+
+    mcp = FakeMcp()
+    client = _client(mcp, "lumen")
+    app.state.operator_gate = OperatorGate(_Withheld())
+    r = client.post("/personas/lumen/tools/call", json={"name": "reconcile", "arguments": {}}, headers=AUTH)
+    assert r.status_code == 403 and "op-reconcile-accounts" in r.json()["detail"]
+    assert mcp.calls == [], "the persona is never reached"

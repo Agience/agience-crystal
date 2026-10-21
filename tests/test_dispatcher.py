@@ -12,6 +12,9 @@ ARTIFACT = {"id": "a1", "content_type": "x/y"}
 
 
 class FakeMantle:
+    async def platform_operators(self, *, token=None):
+        return []          # no tool these tests reach is a platform operator's
+
     def __init__(self, artifact, access_allowed=True):
         self.artifact = artifact
         self.calls = []

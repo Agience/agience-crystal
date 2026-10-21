@@ -29,6 +29,9 @@ ARTIFACT = {
 
 
 class FakeMantle:
+    async def platform_operators(self, *, token=None):
+        return []          # no tool these tests reach is a platform operator's
+
     def __init__(self, artifact=None):
         self.artifact = ARTIFACT if artifact is None else artifact
 

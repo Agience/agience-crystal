@@ -67,6 +67,13 @@ class MantleClient:
         r.raise_for_status()
         return bool(r.json().get("allowed"))
 
+    async def platform_operators(self, *, token: Optional[str] = None) -> list:
+        """Every operator the platform provides, the persona tool it runs, and whether the caller
+        may invoke it (`GET /artifacts/platform-operators`)."""
+        r = await self._client.get("/artifacts/platform-operators", headers=self._headers(token))
+        r.raise_for_status()
+        return (r.json() or {}).get("items") or []
+
     async def links(self, artifact_id: str, name: str, *, token: Optional[str] = None) -> list:
         """The artifact's typed links named `name` (with its `name.` sub-names), each shown only
         when the caller may read what it links. A link confers nothing."""

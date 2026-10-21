@@ -40,6 +40,10 @@ class Dispatcher:
         self.mantle = mantle
         self.types = types
         self.topology = topology
+        # A persona tool the platform offers as an operator needs that operator's grant, however
+        # it is reached: an operator card of anyone's naming it is not a way around it.
+        from crystal.operator_gate import OperatorGate
+        self.operator_gate = OperatorGate(mantle)
         self.mcp = mcp  # McpCaller (mcp_tool dispatch); injected for testability
         self.identity = identity  # CrystalIdentity — mints delegations for event-driven describers
         self.servers = None  # PersonaGateway, set by the app: reaches servers that are not personas
@@ -377,6 +381,7 @@ class Dispatcher:
             raise HTTPException(status_code=502, detail=f"Persona '{slug}' is not registered")
         if self.mcp is None:
             raise HTTPException(status_code=500, detail="MCP caller not configured")
+        await self.operator_gate.check(slug, tool, token)
         return await self.mcp.call_tool(rec.endpoint, tool, args, token=token)
 
     async def _native(self, op, artifact_id, body, token):

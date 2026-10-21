@@ -157,6 +157,7 @@ async def lifespan(app: FastAPI):
         app.state.mantle, app.state.types, app.state.topology,
         mcp=McpCaller(), identity=app.state.identity)
     app.state.personas = PersonaGateway(app.state.topology, app.state.dispatcher.mcp)
+    app.state.operator_gate = app.state.dispatcher.operator_gate   # one gate, one cache
     app.state.dispatcher.servers = app.state.personas
     logger.info("Gateway up. Mantle = %s | awaiting persona registration", config.MANTLE_URI)
     app.state.type_publishes = set()
@@ -440,8 +441,10 @@ async def call_persona_tool(slug: str, request: Request, body: dict = Body(defau
     name = (body or {}).get("name")
     if not name:
         raise HTTPException(status_code=400, detail="body.name is required")
-    return await app.state.personas.call_tool(slug, name, (body or {}).get("arguments") or {},
-                                              _require_bearer(request))
+    token = _require_bearer(request)
+    # A tool the platform offers as an operator needs that operator's grant here too.
+    await app.state.operator_gate.check(slug, name, token)
+    return await app.state.personas.call_tool(slug, name, (body or {}).get("arguments") or {}, token)
 
 
 # `POST /embed` is not a route: an observer computes the coordinate where it is needed rather than

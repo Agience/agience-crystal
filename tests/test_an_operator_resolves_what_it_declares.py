@@ -25,6 +25,9 @@ def _operator(arguments):
 
 
 class FakeMantle:
+    async def platform_operators(self, *, token=None):
+        return []          # no tool these tests reach is a platform operator's
+
     def __init__(self, artifact, links=()):
         self.artifact, self._links, self.asked = artifact, list(links), []
 
@@ -104,3 +107,21 @@ def test_a_map_taken_from_the_request_is_forwarded_as_it_is():
     d.mcp = FakeMcp()
     asyncio.run(d.dispatch("op1", "invoke", {"params": {"x": "$.context.operator"}}, token="tok"))
     assert d.mcp.calls[-1][1] == {"x": "$.context.operator"}
+
+
+def test_an_operator_of_ones_own_cannot_reach_a_platform_tool_one_is_not_granted():
+    """2026-10-21: a person withheld the platform's "Reconcile accounts" could make an operator card
+    of their own naming `lumen.reconcile`, and invoke that."""
+    class Withheld(FakeMantle):
+        async def platform_operators(self, *, token=None):
+            return [{"slug": "op-reconcile-accounts", "server": "iris", "tool": "send_email", "may_invoke": False}]
+
+    reg = TypeRegistry()
+    reg.register({"content_type": OPERATOR, "operations": {"invoke": {"dispatch": INVOKE}}}, server="t")
+    topo = Topology()
+    topo.register("iris", "http://iris:9000/mcp", None)
+    d = Dispatcher(Withheld(_operator({})), reg, topo)
+    d.mcp = FakeMcp()
+    with pytest.raises(HTTPException) as e:
+        asyncio.run(d.dispatch("op1", "invoke", {"params": {}}, token="tok"))
+    assert e.value.status_code == 403 and d.mcp.calls == []
