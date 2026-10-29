@@ -3,7 +3,7 @@
 The dispatcher/gateway that condenses incoming signal into typed content and
 routes it to the chorus persona services.
 """
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 # The live crystal object: structure over the prism contract, flow over an injected embodiment
 # (`prism.embodiment`). Its module is stdlib-only at import time and this package imports no

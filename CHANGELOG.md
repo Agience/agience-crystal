@@ -5,6 +5,11 @@ All notable changes to `agience-crystal` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-29
+
+### Added
+- `.github/workflows/publish.yml`: the Release workflow now also runs on pushes to `release/**` branches. It builds and checks the package as it does for tags, and keeps the resulting files as the `dist` artifact so the platform release deploys exactly those files. Nothing is published from these branches.
+
 ## [0.2.1] - 2026-10-17
 
 ### Added
