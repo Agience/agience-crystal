@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agience-crystal"
-version = "0.2.2"
+version = "0.2.3"
 description = "Agience Crystal — condensation, routing: signal to content type. The dispatcher/gateway fronting the chorus tekton services. Import name is `crystal`."
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.11"

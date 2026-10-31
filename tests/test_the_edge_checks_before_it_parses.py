@@ -80,11 +80,18 @@ def edge(tmp_path, monkeypatch):
 
     registry = TypeRegistry()
     assert registry.register(CHAT, server="aria")
-    monkeypatch.setattr(main.app.state, "trust_anchors", load_trust_anchors(str(tmp_path)), raising=False)
-    monkeypatch.setattr(main.app.state, "types", registry, raising=False)
-    monkeypatch.setattr(main.app.state, "dispatcher", _Dispatcher(), raising=False)
+    # `app.state` is restored by hand rather than through `monkeypatch.setattr`. Starlette's `State`
+    # keeps its values in a private dict, not in the instance `__dict__`, and pytest >= 9.2 reads the
+    # value to restore from `__dict__`: it records every attribute as absent and deletes it at undo.
+    # A second patch of one attribute then deletes it twice, the undo raises, and the rest of it
+    # (KEYS_DIR among it) never runs, so later files see a configured gateway with no manifest.
+    state = main.app.state
+    saved = {name: state[name] for name in state}
     from crystal.topology import Topology
-    monkeypatch.setattr(main.app.state, "topology", Topology(), raising=False)
+    state.trust_anchors = load_trust_anchors(str(tmp_path))
+    state.types = registry
+    state.dispatcher = _Dispatcher()
+    state.topology = Topology()
 
     tokens = {
         "access": signers["origin"].sign(iss=ISSUER, sub="alice", aud=ISSUER),
@@ -92,8 +99,14 @@ def edge(tmp_path, monkeypatch):
         "service": signers["chorus"].sign(iss="chorus", sub="chorus", aud="crystal",
                                           principal_type="service"),
     }
-    yield TestClient(main.app), tokens, calls
-    authority_trust.reset_authority_manifest_for_tests()
+    try:
+        yield TestClient(main.app), tokens, calls
+    finally:
+        for name in list(state):
+            del state[name]
+        for name, value in saved.items():
+            state[name] = value
+        authority_trust.reset_authority_manifest_for_tests()
 
 
 def _auth(token):
@@ -167,7 +180,7 @@ def test_the_registry_is_read_only_by_an_authenticated_caller(edge, path):
     assert client.get(path, headers=_auth(tokens["service"])).status_code == 200
 
 
-def test_a_configured_but_unreadable_manifest_refuses_registry_reads(edge, monkeypatch):
+def test_a_configured_but_unreadable_manifest_refuses_registry_reads(edge):
     client, tokens, _ = edge
-    monkeypatch.setattr(main.app.state, "trust_anchors", {}, raising=False)
+    main.app.state.trust_anchors = {}   # the `edge` fixture restores `app.state` afterwards
     assert client.get("/types/all", headers=_auth(tokens["access"])).status_code == 503

@@ -5,6 +5,11 @@ All notable changes to `agience-crystal` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-10-31
+
+### Fixed
+- The suite passes under pytest 9.2. The `edge` fixture in `tests/test_the_edge_checks_before_it_parses.py` saves `app.state` and restores it itself instead of patching it with `monkeypatch.setattr`. Starlette's `State` keeps its values outside the instance `__dict__`, which pytest 9.2 reads to decide what to restore, so a second patch of one attribute made the undo raise and left `KEYS_DIR` and an empty manifest in place for the files after it. Production code is unchanged.
+
 ## [0.2.2] - 2026-10-29
 
 ### Added
