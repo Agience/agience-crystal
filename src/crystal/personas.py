@@ -111,5 +111,16 @@ class PersonaGateway:
                              for r in (resources or {}).get("resources") or [] if r.get("uri")]
         return info
 
-    async def list(self, token: Optional[str]) -> List[Dict[str, Any]]:
-        return list(await asyncio.gather(*(self.describe(s, token) for s in sorted(self.topology.known()))))
+    async def list(self, token: Optional[str], *, token_for=None) -> List[Dict[str, Any]]:
+        """Every persona, described on `token_for(slug)` when given (a per-hop exchange at Origin,
+        review 12), else on `token`. A persona Origin made no hop to is listed `down`."""
+        async def one(slug):
+            tok = token
+            if token_for is not None:
+                tok = await token_for(slug)
+                if not tok:
+                    return {"server": slug, "name": slug, "tools": [], "resources": [],
+                            "prompts": [], "status": "down",
+                            "error": "Origin made no hop to this persona for this caller"}
+            return await self.describe(slug, tok)
+        return list(await asyncio.gather(*(one(s) for s in sorted(self.topology.known()))))

@@ -117,8 +117,13 @@ def push_server_types(
     }
     headers = {"Content-Type": "application/json"}
     try:
-        # /register does not authenticate requests; the signed identity is sent regardless.
-        headers["Authorization"] = f"Bearer {service_identity.sign_service_jwt(audience='crystal')}"
+        # Signed as the persona itself, with its own enrolled key: Crystal takes a registration
+        # for a slug only from that slug's own anchor (review 16). No key of its own: the host's.
+        import uuid
+        persona = service_identity.load_persona_identity(server_name)
+        headers["Authorization"] = "Bearer " + service_identity.sign_service_jwt(
+            audience="crystal", signer=persona,
+            additional_claims={"jti": uuid.uuid4().hex})    # used once (review 19)
     except Exception:
         pass
     try:

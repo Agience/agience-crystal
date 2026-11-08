@@ -85,14 +85,6 @@ def _persona_slugs(personas: Sequence[Any]) -> set[str]:
     return {p.name for p in personas}
 
 
-def _persona_client_ids(personas: Sequence[Any]) -> frozenset[str]:
-    """The server client ids this host answers to: the `aud` of a delegation minted for a persona.
-
-    `agience-server-<name>` unless the persona names its own, the same default
-    `persona_registration.register_persona` applies."""
-    return frozenset(getattr(p, "client_id", None) or f"agience-server-{p.name}" for p in personas)
-
-
 def _discovery_entries(personas: Sequence[Any]) -> list[dict]:
     return [
         {
@@ -279,22 +271,19 @@ def build_app(personas: Sequence[Any]) -> FastAPI:
     app = FastAPI(title="Agience Crystal Host", lifespan=lifespan)
 
     # -- Universal MCP gateway middleware (UUID -> slug routing) --------------
-    from prism.trust.authority_trust import verify_access_token as _verify_access_token
     from crystal.relay_manager import get_relay_manager
 
     _relay_manager = get_relay_manager()
-    _delegation_audiences = _persona_client_ids(personas)
+    #: The relay dispatch's audience: a delegation narrowed to Crystal itself (review 24).
+    _DISPATCH_AUDIENCE = "crystal"
 
     def _resolve_user_id_from_scope(scope: dict) -> Optional[str]:
         """Resolve the verified ``sub`` from the inbound access token for relay dispatch.
 
         The relay path returns without invoking any persona middleware, so this is the
-        only place the caller identity is verified for relay dispatch. `verify_access_token`
-        checks the signature against origin's anchor and then the claim rule in
-        `prism.access_token`: a refresh, email-verification or password-reset token is refused,
-        as is a program's token and a user token addressed to anything but the authority. A
-        delegation is accepted when it was minted for one of this host's personas. Any refusal
-        yields None, which the middleware renders as 401.
+        only place the caller identity is verified for relay dispatch: Origin's signature and
+        issuer, and a delegation narrowed to Crystal, not a hop's result. Any refusal yields None,
+        which the middleware renders as 401.
         """
         headers = scope.get("headers") or []
         raw_auth = ""
@@ -307,9 +296,18 @@ def build_app(personas: Sequence[Any]) -> FastAPI:
         token = raw_auth[7:].strip()
         if not token:
             return None
+        # Only the delegation the person's Origin session narrows to Crystal (review 24, M2): the
+        # web app's way to Crystal. Never a third-party client's `mcp_client` token, which Mantle
+        # holds, nor the person's own token, the one for Mantle, or a persona's.
         try:
-            claims = _verify_access_token(token, delegation_audiences=_delegation_audiences)
+            from prism.trust.authority_trust import verify_origin_jwt
+            claims = verify_origin_jwt(token, expected_audience=_DISPATCH_AUDIENCE)
         except Exception:
+            return None
+        from crystal.caller_token import _narrowed_to
+        from prism.trust import not_before
+        if (_narrowed_to(claims) != _DISPATCH_AUDIENCE or claims.get("hop")
+                or claims.get("token_type") or not_before.refused(claims)):
             return None
         sub = claims.get("sub")
         return str(sub) if sub else None
@@ -327,6 +325,9 @@ def build_app(personas: Sequence[Any]) -> FastAPI:
     from fastapi import WebSocket, WebSocketDisconnect
     from jose.exceptions import JWTError
 
+    #: The relay's narrowed audience and its one scope (Origin's `NARROW_AUDIENCES`).
+    RELAY_AUDIENCE, RELAY_SCOPE = "relay", "relay:host"
+
     @app.websocket("/relay/v1/connect")
     async def relay_connect(websocket: WebSocket) -> None:
         raw_auth = websocket.headers.get("authorization", "")
@@ -334,12 +335,23 @@ def build_app(personas: Sequence[Any]) -> FastAPI:
             await websocket.close(code=4401, reason="Missing bearer token")
             return
         token = raw_auth[7:].strip()
-        # The socket makes its caller the relay host for `sub`, so it takes the user's own access
-        # token and no delegation: a persona acting for a user is not that user's desktop.
+        # The socket makes its caller the relay host for `sub`, so it takes only the delegation
+        # the person's Origin session narrows to the relay (review 23, H1): `aud` = `act.sub` =
+        # `relay`, scope `relay:host` and nothing else, not a hop's result. Never the person's
+        # platform token, which Mantle holds, and no persona's delegation.
         try:
-            claims = _verify_access_token(token, delegation_audiences=())
+            from prism.trust.authority_trust import verify_origin_jwt
+            claims = verify_origin_jwt(token, expected_audience=RELAY_AUDIENCE)
         except (KeyError, JWTError):
             await websocket.close(code=4401, reason="Invalid bearer token")
+            return
+        from prism.trust import not_before
+        if (claims.get("principal_type") != "delegation" or claims.get("narrowed") is not True
+                or (claims.get("act") or {}).get("sub") != RELAY_AUDIENCE or claims.get("hop")
+                or str(claims.get("scope") or "").split() != [RELAY_SCOPE]
+                or claims.get("token_type") or not_before.refused(claims)):
+            await websocket.close(code=4401, reason="the relay takes only the delegation your "
+                                  "Origin session narrows to it")
             return
         user_id = claims.get("sub")
         if not user_id:

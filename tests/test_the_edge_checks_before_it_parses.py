@@ -70,11 +70,11 @@ def edge(tmp_path, monkeypatch):
     calls = []
 
     class _Dispatcher:
-        async def create(self, content_type, body, token):
+        async def create(self, content_type, body, token, persona_token=None):
             calls.append(("create", content_type))
             return {"ok": True}
 
-        async def dispatch(self, artifact_id, op_name, body, token):
+        async def dispatch(self, artifact_id, op_name, body, token, persona_token=None):
             calls.append(("op", artifact_id, op_name))
             return {"ok": True}
 
@@ -96,9 +96,23 @@ def edge(tmp_path, monkeypatch):
     tokens = {
         "access": signers["origin"].sign(iss=ISSUER, sub="alice", aud=ISSUER),
         "refresh": signers["origin"].sign(iss=ISSUER, sub="alice", aud=ISSUER, token_type="refresh"),
+        # Single-use, addressed to Crystal (review 19).
         "service": signers["chorus"].sign(iss="chorus", sub="chorus", aud="crystal",
-                                          principal_type="service"),
+                                          principal_type="service", jti="edge-1"),
+        # What the web app sends Crystal for a person (review 11, H3): Origin's delegation
+        # narrowed to Crystal, exchanged here for Crystal's own before Mantle sees it.
+        "crystal": signers["origin"].sign(iss=ISSUER, sub="alice", aud="crystal",
+                                          act={"sub": "crystal"}, principal_type="delegation",
+                                          scope="persona:crystal"),
+        # A third-party client's token, addressed to that client (review 24): Mantle holds these.
+        "mcp": signers["origin"].sign(iss=ISSUER, sub="alice", aud="some-mcp-client",
+                                      principal_type="mcp_client", scopes=["read"]),
     }
+    from crystal import caller_token
+
+    async def _exchanged(narrowed):
+        return "crystal-server-delegation"
+    monkeypatch.setattr(caller_token, "_exchange_for_crystal", _exchanged)
     try:
         yield TestClient(main.app), tokens, calls
     finally:
@@ -132,11 +146,12 @@ def test_register_refuses_a_user_token_before_the_parse(edge):
 def test_a_credentialed_request_still_reaches_the_handler(edge):
     """The positive control: the gate replays the body it read, so the handler parses it as usual."""
     client, tokens, calls = edge
-    r = client.post("/create", json={"content_type": "text/plain"}, headers=_auth(tokens["access"]))
+    r = client.post("/create", json={"content_type": "text/plain"}, headers=_auth(tokens["crystal"]))
     assert r.status_code == 200 and calls == [("create", "text/plain")]
-    r = client.post("/artifacts/a-1/op/read", json={"x": 1}, headers=_auth(tokens["access"]))
+    r = client.post("/artifacts/a-1/op/read", json={"x": 1}, headers=_auth(tokens["crystal"]))
     assert r.status_code == 200 and calls[-1] == ("op", "a-1", "read")
-    r = client.post("/register", json={"slug": "zeta", "endpoint": "http://zeta.test/mcp"},
+    # Registered by the slug's own anchor (review 16): the service token is Chorus's, for `chorus`.
+    r = client.post("/register", json={"slug": "chorus", "endpoint": "http://zeta.test/mcp"},
                     headers=_auth(tokens["service"]))
     assert r.status_code == 200, r.text
 
@@ -146,10 +161,10 @@ def test_a_body_over_the_cap_is_refused(edge, monkeypatch):
     client, tokens, calls = edge
     monkeypatch.setattr(config, "MAX_BODY_BYTES", 64, raising=False)
     small = {"content_type": "text/plain"}
-    assert client.post("/create", json=small, headers=_auth(tokens["access"])).status_code == 200
+    assert client.post("/create", json=small, headers=_auth(tokens["crystal"])).status_code == 200
 
     big = {"content_type": "text/plain", "content": "x" * 200}
-    r = client.post("/create", json=big, headers=_auth(tokens["access"]))
+    r = client.post("/create", json=big, headers=_auth(tokens["crystal"]))
     assert r.status_code == 413 and len(calls) == 1
 
 
@@ -184,3 +199,12 @@ def test_a_configured_but_unreadable_manifest_refuses_registry_reads(edge):
     client, tokens, _ = edge
     main.app.state.trust_anchors = {}   # the `edge` fixture restores `app.state` afterwards
     assert client.get("/types/all", headers=_auth(tokens["access"])).status_code == 503
+
+
+@pytest.mark.parametrize("path", ["/types/all", "/resolve/application/vnd.agience.chat+json"])
+def test_the_registry_takes_crystal_s_delegation_and_no_client_s_token(edge, path):
+    """Review 24, M2: the web app reads the registry on its delegation narrowed to Crystal; a
+    third-party client's `mcp_client` token, addressed to that client, reads nothing here."""
+    client, tokens, _ = edge
+    assert client.get(path, headers=_auth(tokens["crystal"])).status_code == 200
+    assert client.get(path, headers=_auth(tokens["mcp"])).status_code == 401

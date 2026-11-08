@@ -1,4 +1,5 @@
-"""The relay takes an Origin *access* token as the caller, and nothing else Origin signs.
+"""The relay's dispatch takes only the delegation narrowed to Crystal (review 24), and its desktop
+socket only the relay delegation (review 23), and nothing else Origin signs.
 
 Origin signs its refresh, email-verification and password-reset tokens with the same key as an
 access token, so a signature check alone accepts all of them. Both relay entry points — gateway
@@ -96,20 +97,20 @@ _NOT_ACCESS = {
 }
 
 
-def test_dispatch_takes_an_access_token(app, sign):
-    assert _resolver(app)(_scope(sign())) == "alice"
+#: What the web app reaches Crystal on: a delegation narrowed to Crystal in the person's session
+#: (review 24, `test_review24_relay_dispatch_takes_only_crystal_s_delegation.py`).
+_CRYSTAL = {"aud": "crystal", "act": {"sub": "crystal"}, "principal_type": "delegation",
+            "narrowed": True, "scope": "persona:crystal"}
 
 
-def test_dispatch_takes_a_delegation_minted_for_its_own_persona(app, sign):
-    tok = sign(aud="agience-server-zeta", principal_type="delegation",
-               act={"sub": "agience-server-zeta"})
-    assert _resolver(app)(_scope(tok)) == "alice"
+def test_dispatch_takes_crystal_s_delegation(app, sign):
+    assert _resolver(app)(_scope(sign(**_CRYSTAL))) == "alice"
 
 
 @pytest.mark.parametrize("claims", list(_NOT_ACCESS.values()), ids=list(_NOT_ACCESS))
 def test_dispatch_refuses_what_is_not_an_access_token(app, sign, claims):
     resolve = _resolver(app)
-    assert resolve(_scope(sign())) == "alice", "positive control failed FIRST"
+    assert resolve(_scope(sign(**_CRYSTAL))) == "alice", "positive control failed FIRST"
     assert resolve(_scope(sign(**claims))) is None
 
 
@@ -162,5 +163,9 @@ def _socket_accepts(app, token, monkeypatch) -> bool:
      "act": {"sub": "agience-server-zeta"}}],
     ids=list(_NOT_ACCESS) + ["persona-delegation"])
 def test_the_desktop_socket_takes_only_the_users_access_token(app, sign, claims, monkeypatch):
-    assert _socket_accepts(app, sign(), monkeypatch), "positive control failed FIRST"
+    # The socket's own credential is the relay delegation (review 23,
+    # `test_review23_the_relay_takes_only_a_relay_token.py`); nothing else Origin signs passes.
+    relay = {"aud": "relay", "act": {"sub": "relay"}, "principal_type": "delegation",
+             "narrowed": True, "scope": "relay:host"}
+    assert _socket_accepts(app, sign(**relay), monkeypatch), "positive control failed FIRST"
     assert not _socket_accepts(app, sign(**claims), monkeypatch)

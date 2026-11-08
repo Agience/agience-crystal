@@ -5,6 +5,39 @@ All notable changes to `agience-crystal` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-11-08
+
+### Changed (review 31)
+- The `agience-prism` floor is 0.1.9.
+
+### Changed (review 24)
+- The relay dispatch takes only the delegation narrowed to Crystal, never an `mcp_client` token, a person's own token or a persona's; the unused `_persona_client_ids` is removed.
+- The registry read refuses an `mcp_client` token and takes the delegation narrowed to Crystal, which the web app reads it on.
+
+### Changed (review 23)
+- The desktop relay socket takes only a delegation narrowed to `relay` (scope `relay:host`), never the person's platform token.
+
+### Changed (review 19)
+- `/register` takes a slug's registration only from that slug, on a token addressed to Crystal and used once. Crystal's own key registers no other persona, and no type is taken over. The gateway gate pins its audience (`crystal`, `chorus`). A persona's registration carries a `jti`.
+
+### Changed (review 17)
+- A type another server already holds is not taken over by a registration, unless the registration is on Crystal's own token. The answer lists what was refused.
+
+### Changed (review 16)
+- `POST /register` for a slug takes only a token that slug's own manifest anchor signed as itself, or Crystal's own. A persona's registration is signed with its own enrolled key.
+
+### Changed (review 15)
+- `caller_token._verify_origin` checks an Origin token's issuer against the manifest's (`verify_origin_jwt`), as prism does.
+
+### Changed (review 14)
+- Crystal's hop assertion carries a fresh `jti` and the `subject_digest` of the narrowed token it exchanges, which Origin now requires.
+
+### Changed (review 12)
+- Crystal reaches a persona for a person by a per-hop exchange at Origin (`caller_token.hop`): its own narrowed delegation exchanged (RFC 8693, `audience` = the persona, Crystal's own key as client assertion) for one narrowed to that persona. Operation dispatch (`mcp_tool`) and `GET /personas` work on that path again; a refused hop reaches nothing, and Mantle still sees only Crystal's own server delegation. The token that reaches a persona is held per request, never on the shared dispatcher.
+
+### Changed (review 11)
+- Crystal never receives or forwards a person's own access token (`caller_token`): it is refused at the door. A persona's surface takes only the delegation Origin narrows to that persona; Crystal's own work takes the delegation narrowed to Crystal, exchanged at Origin for Crystal's own server delegation before Mantle sees it. A delegation narrowed to one persona reaches no other, and Crystal's own reaches no persona. Tokens issued before their person's sign-in bound are refused.
+
 ## [0.2.3] - 2026-10-31
 
 ### Fixed

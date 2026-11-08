@@ -124,10 +124,18 @@ class TypeRegistry:
         self._cache: Dict[str, TypeDefinition] = {}
         self._builtin: Dict[str, TypeDefinition] = {}
 
-    def register(self, definition: dict, *, server: Optional[str] = None) -> bool:
+    def register(self, definition: dict, *, server: Optional[str] = None,
+                 take_over: bool = False) -> bool:
+        """Register one type for `server`. A content type another server already holds is not
+        taken over (review 17, L2) unless `take_over` (a registration on Crystal's own token)."""
         td = parse_type_def(definition, server=server)
         if td is None:
             logger.warning("Ignored malformed type def from server=%s", server)
+            return False
+        held = self._cache.get(td.content_type)
+        if held is not None and held.server != server and not take_over:
+            logger.warning("Refused %s from server=%s: %s registered it", td.content_type, server,
+                           held.server)
             return False
         self._cache[td.content_type] = td
         return True

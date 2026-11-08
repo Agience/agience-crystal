@@ -17,6 +17,7 @@ before dispatch against Mantle's audited `check_access` chokepoint (GET
 from __future__ import annotations
 
 import asyncio
+import contextvars as _contextvars
 import json
 import logging
 from typing import Any, Optional
@@ -32,6 +33,12 @@ class _Link(tuple):
     type, so a caller's parameter that happens to read `@relationship.x` stays the caller's data."""
     def __new__(cls, name: str, optional: bool):
         return super().__new__(cls, (name, optional))
+
+
+#: What reaches a persona for this request (`caller_token.Caller.for_persona_hop`), per task, so
+#: concurrent requests on the one dispatcher never see each other's.
+_PERSONA_TOKEN: "_contextvars.ContextVar" = _contextvars.ContextVar("crystal_persona_token",
+                                                                    default=None)
 
 
 class Dispatcher:
@@ -51,9 +58,11 @@ class Dispatcher:
         self._describe_dedup_ttl = describe_dedup_ttl
 
     async def dispatch(self, artifact_id: str, op_name: str, body: dict,
-                       *, token: Optional[str] = None) -> Any:
+                       *, token: Optional[str] = None, persona_token=None) -> Any:
         """Dispatch, mapping upstream (Mantle/persona) HTTP errors to clean statuses
-        instead of leaking a 500."""
+        instead of leaking a 500. `token` reaches Mantle; `persona_token(slug)`, when given, is
+        what reaches a persona (`caller_token.Caller.for_persona_hop`)."""
+        _PERSONA_TOKEN.set(persona_token)
         try:
             return await self._run(artifact_id, op_name, body, token)
         except httpx.HTTPStatusError as e:
@@ -63,10 +72,11 @@ class Dispatcher:
                 detail=f"upstream {code} from {e.request.url.path}") from e
 
     async def create(self, content_type: str, body: dict,
-                     *, token: Optional[str] = None) -> Any:
+                     *, token: Optional[str] = None, persona_token=None) -> Any:
         """Create a new artifact of `content_type`. Unlike `dispatch`, there is no
         existing artifact to fetch — the content_type alone selects the `create`
         operation. Maps upstream HTTP errors to clean statuses."""
+        _PERSONA_TOKEN.set(persona_token)
         try:
             result = await self._run_create(content_type, body, token)
         except httpx.HTTPStatusError as e:
@@ -382,7 +392,16 @@ class Dispatcher:
         if self.mcp is None:
             raise HTTPException(status_code=500, detail="MCP caller not configured")
         await self.operator_gate.check(slug, tool, token)
-        return await self.mcp.call_tool(rec.endpoint, tool, args, token=token)
+        # A persona takes only the delegation narrowed to it (review 11, H3): for a person's work
+        # that is a per-hop exchange at Origin (review 12). A refused hop reaches nothing.
+        reach = _PERSONA_TOKEN.get()
+        ptoken = token
+        if reach is not None:
+            ptoken = await reach(slug)
+            if not ptoken:
+                raise HTTPException(status_code=403, detail=f"Origin made no hop to {slug} for "
+                                    f"this caller; nothing was sent to it")
+        return await self.mcp.call_tool(rec.endpoint, tool, args, token=ptoken)
 
     async def _native(self, op, artifact_id, body, token):
         # native ops = Mantle direct primitives (container create/move). Mantle does

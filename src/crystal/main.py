@@ -63,9 +63,10 @@ def _require_reader(request: Request) -> None:
     The registry holds every persona's type definitions: operation targets, the persona that
     serves each type, and the `ui` blocks. The gateway answers on the public edge (browsers call it
     cross-origin, hence the CORS policy below), and its only browser consumer, Facet's
-    `ContentTypesProvider`, runs behind `LoginProtected` and sends the signed-in user's token. So a
-    caller must present either an Origin access token (`prism.trust.verify_access_token`, which
-    refuses refresh, email-verification and password-reset tokens) or a platform service token.
+    `ContentTypesProvider`, runs behind `LoginProtected` and sends the delegation Origin narrows to
+    Crystal in the person's session. So a caller presents that delegation, a person's own Origin
+    access token (`prism.trust.verify_access_token`, which refuses refresh, email-verification and
+    password-reset tokens), or a platform service token; never a third-party client's token.
 
     No authority manifest follows `_require_platform_service`: KEYS_DIR set means refuse (503),
     KEYS_DIR unset is the dev/standalone mode and stays open."""
@@ -81,10 +82,19 @@ def _require_reader(request: Request) -> None:
         raise HTTPException(status_code=401, detail="authentication required")
     if verify_service_token(token, anchors):
         return
+    # A person's own access token, or the delegation the web app reaches Crystal on, narrowed to
+    # Crystal in the person's session. Never a third-party client's `mcp_client` token, which is
+    # addressed to that client and which Mantle holds (review 24, M2).
+    from crystal.caller_token import _narrowed_to, _verify_origin
+    claims = _verify_origin(token)
+    if claims is not None and _narrowed_to(claims) == "crystal" and not claims.get("hop")             and not claims.get("token_type"):
+        return
     try:
         from prism.trust.authority_trust import verify_access_token
-        verify_access_token(token, delegation_audiences=())
+        claims = verify_access_token(token, delegation_audiences=())
     except Exception:
+        raise HTTPException(status_code=401, detail="invalid access token")
+    if (claims.get("principal_type") or "user") != "user":
         raise HTTPException(status_code=401, detail="invalid access token")
 
 
@@ -310,18 +320,44 @@ def _publish_server_types(app_: FastAPI, server: str) -> None:
     task.add_done_callback(pending.discard)
 
 
+def _require_the_persona_itself(request: Request, slug: str) -> None:
+    """`/register` repoints `slug` at an endpoint, so only `slug` itself may ask (review 16): a
+    service token signed by that slug's own manifest anchor as itself, addressed to this gateway,
+    used once (review 19). Any other anchored service, Mantle, another persona and Crystal's own
+    key included, is refused: a persona registers itself, at its own start. With no manifest
+    (dev/standalone) the platform-service gate has already allowed it."""
+    from crystal.identity import verify_token_of
+
+    anchors = getattr(request.app.state, "trust_anchors", {}) or {}
+    if not anchors:
+        return
+    token = _bearer(request) or ""
+    if not verify_token_of(token, anchors, slug):
+        raise HTTPException(status_code=403, detail=f"only {slug} itself registers {slug}")
+
+
 @app.post("/register")
 async def register_server(request: Request, body: RegisterRequest):
     """A persona registers itself + the content types it owns. Re-registering
     replaces that persona's previous types (idempotent). Gateway-internal: requires
     a platform service token (personas sign one; see crystal/type_registration.py)."""
     _require_platform_service(request)
+    _require_the_persona_itself(request, body.slug)
+    # A type another server holds is never taken over (review 17); its holder gives it up by
+    # registering again without it.
+    take_over = False
     app.state.types.remove_server(body.slug)
     app.state.topology.register(body.slug, body.endpoint, body.client_id)
-    n = sum(1 for d in body.types if app.state.types.register(d, server=body.slug))
+    refused = []
+    n = 0
+    for d in body.types:
+        if app.state.types.register(d, server=body.slug, take_over=take_over):
+            n += 1
+        elif isinstance(d, dict) and d.get("content_type"):
+            refused.append(str(d["content_type"]))
     logger.info("Registered persona '%s' (%s) with %d type(s)", body.slug, body.endpoint, n)
     _publish_server_types(app, body.slug)
-    return {"registered": body.slug, "endpoint": body.endpoint, "types": n}
+    return {"registered": body.slug, "endpoint": body.endpoint, "types": n, "refused": refused}
 
 
 @app.get("/health")
@@ -407,7 +443,11 @@ async def create_artifact(request: Request, body: dict = Body(default_factory=di
     content_type = (body or {}).get("content_type")
     if not content_type:
         raise HTTPException(status_code=400, detail="body.content_type is required")
-    return await app.state.dispatcher.create(content_type, body, token=_require_bearer(request))
+    from crystal import caller_token
+    caller = await caller_token.resolve(_require_bearer(request))
+    return await app.state.dispatcher.create(
+        content_type, body, token=await caller_token.for_mantle(caller.raw),
+        persona_token=caller.for_persona_hop)
 
 
 @app.post("/artifacts/{artifact_id}/op/{op_name}")
@@ -416,14 +456,19 @@ async def run_operation(artifact_id: str, op_name: str, request: Request,
     """Dispatch an operation on an artifact (the operation surface relocated from
     Mantle). Resolves content_type -> op, routes by kind. Forwards the caller's
     bearer token so Mantle/personas enforce access."""
+    from crystal import caller_token
+    caller = await caller_token.resolve(_require_bearer(request))
     return await app.state.dispatcher.dispatch(
-        artifact_id, op_name, body, token=_require_bearer(request))
+        artifact_id, op_name, body, token=await caller_token.for_mantle(caller.raw),
+        persona_token=caller.for_persona_hop)
 
 
 @app.get("/personas")
 async def list_personas(request: Request):
     """Every registered persona with its tools and resources (`personas.PersonaGateway`)."""
-    return {"items": await app.state.personas.list(_require_bearer(request))}
+    from crystal import caller_token
+    caller = await caller_token.resolve(_require_bearer(request))
+    return {"items": await app.state.personas.list(None, token_for=caller.for_persona_hop)}
 
 
 @app.post("/personas/{slug}/resources/read")
@@ -432,7 +477,9 @@ async def read_persona_resource(slug: str, request: Request, body: dict = Body(d
     uri = (body or {}).get("uri")
     if not uri:
         raise HTTPException(status_code=400, detail="body.uri is required")
-    return await app.state.personas.read_resource(slug, uri, _require_bearer(request))
+    from crystal import caller_token
+    token = await caller_token.for_persona(_require_bearer(request), slug)
+    return await app.state.personas.read_resource(slug, uri, token)
 
 
 @app.post("/personas/{slug}/tools/call")
@@ -441,7 +488,8 @@ async def call_persona_tool(slug: str, request: Request, body: dict = Body(defau
     name = (body or {}).get("name")
     if not name:
         raise HTTPException(status_code=400, detail="body.name is required")
-    token = _require_bearer(request)
+    from crystal import caller_token
+    token = await caller_token.for_persona(_require_bearer(request), slug)
     # A tool the platform offers as an operator needs that operator's grant here too.
     await app.state.operator_gate.check(slug, name, token)
     return await app.state.personas.call_tool(slug, name, (body or {}).get("arguments") or {}, token)

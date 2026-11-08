@@ -50,6 +50,10 @@ def load_trust_anchors(keys_dir: str) -> Dict[str, dict]:
         return {}
 
 
+#: The names a service token addressed to this gateway carries as its `aud`.
+GATEWAY_AUDIENCES = ["crystal", "chorus"]
+
+
 def verify_service_token(token: str, anchors: Dict[str, dict]) -> bool:
     """True iff ``token`` is a valid RS256 **service** JWT signed by a trust anchor.
 
@@ -64,10 +68,8 @@ def verify_service_token(token: str, anchors: Dict[str, dict]) -> bool:
     `mcp_tool` dispatch to that persona arrive at it with the caller's delegation JWT attached
     (`mcp_client.py`, `Topology.register`).
 
-    Audience is not pinned. This gateway is reachable as both "crystal" and "chorus", and nothing in
-    the tree fixes which name real callers use, so `principal_type` alone is the check: it stops an
-    end-user token from being accepted as a service token, but not one platform service from
-    replaying another's token here."""
+    The audience is pinned to this gateway's own names (review 19), so a token one service sent
+    another (Crystal's to Mantle, Mantle's to Origin) is useless here."""
     for jwks in anchors.values():
         try:
             claims = jwt.decode(token, jwks, algorithms=["RS256"],
@@ -77,9 +79,52 @@ def verify_service_token(token: str, anchors: Dict[str, dict]) -> bool:
         except Exception:
             continue
         # Signed by a trust anchor — so no other anchor can improve on this verdict. Whether it is
-        # accepted turns on what kind of principal it is, not on who signed it.
-        return claims.get("principal_type") == "service"
+        # accepted turns on what kind of principal it is, and whom it is addressed to.
+        aud = claims.get("aud")
+        auds = aud if isinstance(aud, list) else [aud]
+        return claims.get("principal_type") == "service" and any(
+            a in GATEWAY_AUDIENCES for a in auds)
     return False
+
+
+#: The jtis of service tokens this gateway has taken, until each expires (review 19).
+_SPENT: Dict[str, float] = {}
+
+
+def _spend(jti: str, exp: float) -> bool:
+    """Record a token's jti; False when it was already taken. Expired records are dropped."""
+    import time
+    now = time.time()
+    for k in [k for k, v in _SPENT.items() if v < now]:
+        del _SPENT[k]
+    if jti in _SPENT:
+        return False
+    _SPENT[jti] = float(exp)
+    return True
+
+
+def verify_token_of(token: str, anchors: Dict[str, dict], name: str, *,
+                    audience: str = "crystal") -> bool:
+    """True iff ``token`` is a service JWT that `name` signed as itself for this gateway, once:
+    verified against `name`'s own manifest anchor only, with `iss == sub == name` (review 16),
+    `aud` this gateway's own name, and a `jti` not seen before (review 19). A token `name` sent
+    another service (Mantle's change feed, a type publish) is useless here, and so is one replayed.
+    """
+    jwks = anchors.get(name)
+    if not name or not jwks:
+        return False
+    try:
+        claims = jwt.decode(token, jwks, algorithms=["RS256"], audience=audience,
+                            options={"verify_iss": False})
+    except Exception:  # noqa: BLE001
+        return False
+    if not (claims.get("principal_type") == "service" and claims.get("iss") == name
+            and claims.get("sub") == name):
+        return False
+    jti, exp = claims.get("jti"), claims.get("exp")
+    if not isinstance(jti, str) or not jti or not isinstance(exp, (int, float)):
+        return False
+    return _spend(f"{name}:{jti}", exp)
 
 
 class CrystalIdentity:
@@ -103,10 +148,13 @@ class CrystalIdentity:
             logger.warning("Could not read crystal identity: %s", exc)
             return None
 
-    def service_jwt(self, audience: str, ttl_seconds: int = 300) -> str:
-        """Sign a platform-service JWT (iss=sub=crystal) for a peer service."""
+    def service_jwt(self, audience: str, ttl_seconds: int = 300,
+                    extra: Optional[dict] = None) -> str:
+        """Sign a platform-service JWT (iss=sub=crystal) for a peer service; `extra` adds claims
+        (a hop assertion's `jti` and `subject_digest`)."""
         now = int(time.time())
         claims = {
+            **(extra or {}),
             "iss": _NAME, "sub": _NAME, "aud": audience,
             "principal_type": "service", "iat": now, "exp": now + ttl_seconds,
         }

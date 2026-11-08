@@ -70,8 +70,11 @@ def test_a_genuine_service_token_is_accepted(anchor):
     """The positive control: without it, the rejections above would pass even with the function
     stubbed out."""
     pem, anchors = anchor
-    tok = _mint(pem, principal_type="service", sub="mantle", iss="mantle")
+    tok = _mint(pem, principal_type="service", sub="mantle", iss="mantle", aud="crystal")
     assert verify_service_token(tok, anchors) is True
+    # Addressed to another service, it is useless here (review 19).
+    assert verify_service_token(_mint(pem, principal_type="service", sub="mantle",
+                                      iss="mantle"), anchors) is False
 
 
 def test_an_unsigned_or_foreign_token_is_rejected(anchor):

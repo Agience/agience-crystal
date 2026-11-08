@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agience-crystal"
-version = "0.2.3"
+version = "0.2.4"
 description = "Agience Crystal — condensation, routing: signal to content type. The dispatcher/gateway fronting the chorus tekton services. Import name is `crystal`."
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.11"
@@ -51,8 +51,9 @@ dependencies = [
     # differ on purpose; `agience-prism-py` is not a distribution and resolves to nothing on PyPI.
     #
     # 0.1.4 is the floor because `crystal.host` and `crystal.main` verify callers with
-    # `prism.trust.verify_access_token`, which first ships in 0.1.4.
-    "agience-prism>=0.1.4",
+    # `prism.trust.verify_access_token`, which first ships in 0.1.4. 0.1.9 is the floor now: the
+    # trust symbols the custody release reads shipped after the tagged 0.1.8 (review 31).
+    "agience-prism>=0.1.9",
 ]
 
 [project.urls]
