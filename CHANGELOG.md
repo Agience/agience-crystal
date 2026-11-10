@@ -8,6 +8,7 @@ All notable changes to `agience-crystal` are recorded here. The format follows
 ## [0.2.5] - 2026-11-10
 
 ### Fixed
+- The Invite card type (`application/vnd.agience.grant-invite+json`) is no longer offered for creation (BUG-017): its `create` named a native service that does not exist, so the card made no invite. Invites are made at Origin, in the person's Origin session (the Share dialog), and reach Mantle from Origin's ledger.
 - A service enrolled since Crystal started is taken without a restart (BUG-031): when a service token verifies against no anchor in memory, the anchors are read again from the keys folder, where the release that enrolled it put its anchor. Crystal read them once, at start, so a persona given a key of its own was refused until Crystal restarted.
 
 ## [0.2.4] - 2026-11-08

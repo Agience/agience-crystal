@@ -4,10 +4,10 @@
   "inherits": [
     "application/json"
   ],
-  "description": "A shareable access grant — owner creates an invite naming a target resource, grantee claims it with a token to receive an active grant. Unifies public link, email invite, and domain invite flows behind one artifact type.",
+  "description": "An invite to a resource, as Origin's ledger holds it and Mantle applies it. Invites are made at Origin, in the person's Origin session (the Share dialog); this type is not created here (John, 2026-11-10, BUG-017).",
   "operations": {
     "create": {
-      "enabled": true,
+      "enabled": false,
       "requires_grant": "create",
       "dispatch": { "kind": "native", "target": "grant_invite_service.create_invite" },
       "audit": true,
@@ -56,7 +56,7 @@
     "default_mode": "floating",
     "default_state": "view",
     "is_container": false,
-    "creatable": true,
+    "creatable": false,
     "viewer": null
   }
 }
