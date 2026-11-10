@@ -139,6 +139,8 @@ class Dispatcher:
             return result
         if op.kind == "mcp_tool":
             return await self._mcp_tool(op, artifact, body, token)
+        if op.kind == "workflow":
+            return await self._workflow(op, artifact, body, token)
         if op.kind == "native":
             result = await self._native(op, artifact_id, body, token)
             self._fire_describer(content_type, artifact_id, token)
@@ -394,6 +396,89 @@ class Dispatcher:
         await self.operator_gate.check(slug, tool, token)
         # A persona takes only the delegation narrowed to it (review 11, H3): for a person's work
         # that is a per-hop exchange at Origin (review 12). A refused hop reaches nothing.
+        reach = _PERSONA_TOKEN.get()
+        ptoken = token
+        if reach is not None:
+            ptoken = await reach(slug)
+            if not ptoken:
+                raise HTTPException(status_code=403, detail=f"Origin made no hop to {slug} for "
+                                    f"this caller; nothing was sent to it")
+        return await self.mcp.call_tool(rec.endpoint, tool, args, token=ptoken)
+
+    async def _workflow(self, op, artifact, body, token):
+        """A workflow's steps, run here (John, 2026-11-10, BUG-048; `workflow_runner`): each the
+        operator's own invoke, on the caller's delegation, one hop to the persona that serves it.
+        Anything that is not a workflow of operator steps goes where the type declares (`mcp_tool`:
+        Lumen runs a single step, and a workflow made before steps were operators)."""
+        from crystal import workflow_runner as W
+
+        run = W.workflow_of(artifact, body)
+        if run is None:
+            return await self._mcp_tool(op, artifact, body, token)
+        wid = str(artifact.get("root_id") or artifact.get("id") or "")
+        links: dict = {}
+        if W.uses_links(run):
+            try:
+                found = await self.mantle.links(wid, "*", token=token)
+            except httpx.HTTPError:
+                found = []        # as Lumen read them: a link it may not read is named as missing
+            for m in found:
+                rel = m.get("relationship")
+                if rel and rel not in links:
+                    links[rel] = m.get("root_id") or m.get("id")
+        params = (body or {}).get("params") or {}
+        if isinstance(params, str):
+            try:
+                params = json.loads(params)
+            except ValueError:
+                params = {}
+        listed: dict = {}
+        workspace_id = (body or {}).get("workspace_id") or artifact.get("collection_id")
+
+        async def invoke(operator_id: str, args: dict):
+            return await self._invoke_operator(operator_id, args, token, listed, workspace_id)
+
+        return await W.run_steps(run, params if isinstance(params, dict) else {}, links, invoke)
+
+    async def _invoke_operator(self, operator_id: str, args: dict, token, listed: dict,
+                               workspace_id=None):
+        """One workflow step: the operator's invoke, with the step's arguments. Its persona and tool
+        are what the operator says, read on the caller's delegation (a timer's job grant opens it),
+        or, for an operator the platform provides, what the platform lists; an operator neither
+        shows is refused in words, never guessed."""
+        from crystal import workflow_runner as W
+
+        artifact = await self.mantle.get_artifact(operator_id, token=token)
+        if artifact is None:
+            raise HTTPException(status_code=404, detail="the step's operator is not one you may read")
+        if not await self.mantle.my_access(operator_id, "invoke", token=token):
+            raise HTTPException(status_code=403, detail="you may not invoke the step's operator")
+        spec = W.context_of(artifact).get("operator") or {}
+        if spec.get("server") and spec.get("tool"):
+            op = self.types.resolve_operation(artifact.get("content_type") or "", "invoke")
+            if op is not None and op.kind == "mcp_tool":
+                return await self._mcp_tool(op, artifact, {"params": args,
+                                                           **({"workspace_id": workspace_id} if workspace_id else {})}, token)
+        if not listed:
+            listed.update({i.get("id"): i for i in await self.mantle.platform_operators(token=token)
+                           if i.get("id")})
+        item = listed.get(operator_id) or listed.get(artifact.get("root_id"))
+        if not item or not item.get("server") or not item.get("tool"):
+            raise HTTPException(status_code=403, detail="this step's operator cannot be read here, so "
+                                "it cannot be run on this request")
+        return await self._call_persona(str(item["server"]), str(item["tool"]), args, token)
+
+    async def _call_persona(self, slug: str, tool: str, args: dict, token):
+        """A persona's tool, as `_mcp_tool` reaches one: the operator gate, then one hop."""
+        rec = self.topology.resolve(slug)
+        if rec is None and self.servers is not None:
+            # Not a persona: a server a person added, by its artifact id, as `_mcp_tool` reaches one.
+            return await self.servers.call_tool(slug, tool, args, token)
+        if rec is None:
+            raise HTTPException(status_code=502, detail=f"Persona '{slug}' is not registered")
+        if self.mcp is None:
+            raise HTTPException(status_code=500, detail="MCP caller not configured")
+        await self.operator_gate.check(slug, tool, token)
         reach = _PERSONA_TOKEN.get()
         ptoken = token
         if reach is not None:

@@ -5,6 +5,11 @@ All notable changes to `agience-crystal` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.6] - 2026-11-10
+
+### Changed
+- The gateway runs a workflow's steps (John, 2026-11-10, BUG-048). A step served by another persona never ran, on a timer's firing or on "Run now": Lumen handed each step to the gateway, but a request reaches Lumen through the gateway as a hop's result, which Origin never exchanges again. A `workflow` dispatch kind now runs each step as its operator's own invoke, on the caller's own delegation, by one hop to the persona that serves it, with the step semantics Lumen had (`$.previous`, `$.steps.<name>`, `@link.<name>`, a step answering an error fails the run). An operator's persona and tool are what it says when the caller may read it (a timer's job grant opens it) or what the platform lists for one it provides; an operator neither shows is refused in words. A workflow's sealed steps come with the request (`body.context`) when the caller cannot read them. It takes only what it does exactly as Lumen did: a workflow with no steps, a step that is not an operator, a step with a `condition`, a `retry` block or a run against a state artifact goes to Lumen as before, as does a single step; every other dispatch kind is unchanged. A run taken here records no Run card in the workflow's Runs collection; a timer still records its result where it names.
+
 ## [0.2.5] - 2026-11-10
 
 ### Fixed
