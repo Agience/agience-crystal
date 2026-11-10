@@ -5,6 +5,11 @@ All notable changes to `agience-crystal` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-11-10
+
+### Fixed
+- A service enrolled since Crystal started is taken without a restart (BUG-031): when a service token verifies against no anchor in memory, the anchors are read again from the keys folder, where the release that enrolled it put its anchor. Crystal read them once, at start, so a persona given a key of its own was refused until Crystal restarted.
+
 ## [0.2.4] - 2026-11-08
 
 ### Changed (review 31)

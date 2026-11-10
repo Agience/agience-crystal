@@ -139,7 +139,13 @@ def _require_platform_service(request: Request, *, static_key: str = "") -> None
     if static_key and secrets.compare_digest(token, static_key):
         return
     if not verify_service_token(token, anchors):
-        raise HTTPException(status_code=401, detail="invalid service token")
+        # A service enrolled since this process started: the release that enrolled it added its
+        # anchor to the manifest in this keys folder (2026-11-10, BUG-031). Read the anchors again
+        # rather than refuse it until a restart; a token no anchor on disk verifies is refused.
+        fresh = load_trust_anchors(config.KEYS_DIR) or {}
+        if fresh == anchors or not verify_service_token(token, fresh):
+            raise HTTPException(status_code=401, detail="invalid service token")
+        request.app.state.trust_anchors = fresh
 
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL, logging.INFO))
 logger = logging.getLogger("agience.crystal")
@@ -331,6 +337,13 @@ def _require_the_persona_itself(request: Request, slug: str) -> None:
     anchors = getattr(request.app.state, "trust_anchors", {}) or {}
     if not anchors:
         return
+    if slug not in anchors:
+        # A persona enrolled since this process started: its anchor was added to the manifest in
+        # this keys folder by the release that enrolled it (2026-11-10, BUG-031). Read the anchors
+        # again, once per registration, rather than refuse it until a restart.
+        fresh = load_trust_anchors(config.KEYS_DIR) or {}
+        if slug in fresh:
+            request.app.state.trust_anchors = anchors = fresh
     token = _bearer(request) or ""
     if not verify_token_of(token, anchors, slug):
         raise HTTPException(status_code=403, detail=f"only {slug} itself registers {slug}")

@@ -167,3 +167,24 @@ def test_a_type_another_server_holds_is_not_taken_over():
                headers={"Authorization": f"Bearer {_tok(keys['iris'][0], 'iris')}"})
     assert r.status_code == 200 and r.json()["types"] == 1, r.text
     assert st.types._cache["application/vnd.test.thing+json"].server == "iris"
+
+
+def test_a_persona_enrolled_since_the_start_registers_without_a_restart(monkeypatch):
+    """2026-11-10, BUG-031: Sage's anchor was added to the manifest after Crystal started; Crystal
+    read its anchors once and refused Sage until a restart. A slug with no anchor loaded is looked
+    up again on disk, once, and then registers like any other."""
+    from crystal import main as M
+    c, st, keys = _gateway()
+    sage_pem, sage_jwks = _anchor()
+    monkeypatch.setattr(M, "load_trust_anchors", lambda _d: {**st.trust_anchors, "sage": sage_jwks})
+    r = c.post("/register", json={"slug": "sage", "endpoint": "http://sage.internal:1/mcp",
+                                  "client_id": "agience-server-sage", "types": []},
+               headers={"Authorization": f"Bearer {_tok(sage_pem, 'sage')}"})
+    assert r.status_code == 200, r.text
+    assert st.topology.resolve("sage") is not None and "sage" in st.trust_anchors
+    # A slug still unknown on disk is refused as before, and the anchors are left as they were.
+    other_pem, _ = _anchor()
+    r = c.post("/register", json={"slug": "ophan", "endpoint": "http://x:1/mcp",
+                                  "client_id": "agience-server-ophan", "types": []},
+               headers={"Authorization": f"Bearer {_tok(other_pem, 'ophan')}"})
+    assert r.status_code in (401, 403)          # refused at the service gate or the slug's own
